@@ -1,0 +1,242 @@
+[
+  {
+    "id": "manufacturing_startup_saw",
+    "title": "Запуск ленточнопильного станка",
+    "expected_profile": "manufacturing",
+    "payload": {
+      "task": "Составить инструкцию по безопасной подготовке ленточнопильного станка к запуску",
+      "user_level": "new_operator",
+      "instruction_type": "equipment_startup",
+      "industry_profile": "manufacturing",
+      "department": "Заготовительный участок",
+      "equipment": "Ленточнопильный станок",
+      "operation_name": "Подготовка станка к запуску",
+      "technical_context": "Перед запуском проверить ограждения, аварийную остановку, натяжение полотна, отсутствие посторонних предметов и состояние зоны резания.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "manufacturing_shutdown_press",
+    "title": "Остановка прессового оборудования",
+    "expected_profile": "manufacturing",
+    "payload": {
+      "task": "Подготовить инструкцию по остановке прессового оборудования и передаче смены",
+      "user_level": "experienced_operator",
+      "instruction_type": "equipment_shutdown",
+      "industry_profile": "manufacturing",
+      "department": "Кузнечно-прессовый участок",
+      "equipment": "Прессовое оборудование",
+      "operation_name": "Остановка и передача смены",
+      "technical_context": "Оборудование нужно привести в безопасное состояние, убрать инструмент, зафиксировать отклонения, проверить ограждения и передать замечания мастеру.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "construction_site_inspection",
+    "title": "Проверка строительной площадки",
+    "expected_profile": "construction",
+    "payload": {
+      "task": "Составить инструкцию по проверке строительной площадки перед началом работ",
+      "user_level": "engineer",
+      "instruction_type": "inspection",
+      "industry_profile": "construction",
+      "department": "Строительный участок",
+      "equipment": "Временные ограждения и рабочая зона",
+      "operation_name": "Предсменная проверка площадки",
+      "technical_context": "Проверить ограждения, проходы, СИЗ, пожарные риски, порядок допуска, состояние временных конструкций и ответственного производителя работ.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "construction_hot_work",
+    "title": "Подготовка огневых работ",
+    "expected_profile": "construction",
+    "payload": {
+      "task": "Подготовить инструкцию по подготовке места к огневым работам на объекте",
+      "user_level": "experienced_operator",
+      "instruction_type": "workplace_preparation",
+      "industry_profile": "construction",
+      "department": "Монтажный участок",
+      "equipment": "Пост огневых работ",
+      "operation_name": "Подготовка зоны огневых работ",
+      "technical_context": "Перед работой убрать горючие материалы, проверить огнетушитель, ограждение зоны, наряд-допуск, вентиляцию и порядок наблюдения после завершения.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "occupational_safety_onboarding",
+    "title": "Первичный инструктаж по охране труда",
+    "expected_profile": "occupational_safety",
+    "payload": {
+      "task": "Сформировать инструкцию для первичного инструктажа нового работника по охране труда",
+      "user_level": "engineer",
+      "instruction_type": "training",
+      "industry_profile": "occupational_safety",
+      "department": "Служба охраны труда",
+      "equipment": "Учебное рабочее место",
+      "operation_name": "Первичный инструктаж",
+      "technical_context": "Нужно объяснить опасные зоны, СИЗ, порядок допуска, действия при нарушениях, роль наставника и проверку понимания перед самостоятельной работой.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "emergency_evacuation",
+    "title": "Действия при пожарной тревоге",
+    "expected_profile": "emergency_response",
+    "payload": {
+      "task": "Составить инструкцию действий персонала при пожарной тревоге в производственном здании",
+      "user_level": "new_operator",
+      "instruction_type": "general",
+      "industry_profile": "emergency_response",
+      "department": "Производственный корпус",
+      "equipment": "Система оповещения и пути эвакуации",
+      "operation_name": "Реагирование на пожарную тревогу",
+      "technical_context": "При сигнале тревоги прекратить работу, обесточить оборудование при безопасной возможности, пройти к эвакуационному выходу и сообщить ответственному о замеченных рисках.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "public_service_documents",
+    "title": "Прием документов у заявителя",
+    "expected_profile": "public_service",
+    "payload": {
+      "task": "Подготовить инструкцию для сотрудника по приему документов у заявителя",
+      "user_level": "new_operator",
+      "instruction_type": "general",
+      "industry_profile": "public_service",
+      "department": "МФЦ",
+      "equipment": "Рабочее место специалиста приема",
+      "operation_name": "Прием и первичная проверка документов",
+      "technical_context": "Проверить личность заявителя, комплектность документов, согласие на обработку данных, корректность регистрации обращения и выдачу подтверждения.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "housing_utilities_leak",
+    "title": "Реагирование на протечку в доме",
+    "expected_profile": "housing_utilities",
+    "payload": {
+      "task": "Составить инструкцию диспетчера ЖКХ при обращении о протечке в многоквартирном доме",
+      "user_level": "new_operator",
+      "instruction_type": "general",
+      "industry_profile": "housing_utilities",
+      "department": "Аварийно-диспетчерская служба",
+      "equipment": "Диспетчерское рабочее место",
+      "operation_name": "Обработка заявки о протечке",
+      "technical_context": "Зафиксировать адрес, контакт, место протечки, риск электробезопасности, наличие пострадавших, передать аварийной бригаде и предупредить заявителя о безопасных действиях.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "healthcare_room_preparation",
+    "title": "Подготовка процедурного кабинета",
+    "expected_profile": "healthcare",
+    "payload": {
+      "task": "Подготовить инструкцию по подготовке процедурного кабинета к началу приема",
+      "user_level": "experienced_operator",
+      "instruction_type": "workplace_preparation",
+      "industry_profile": "healthcare",
+      "department": "Процедурный кабинет",
+      "equipment": "Рабочее место медицинской сестры",
+      "operation_name": "Подготовка кабинета",
+      "technical_context": "Проверить чистоту поверхности, СИЗ, контейнеры для отходов, наличие расходных материалов, маркировку, журнал уборки и готовность к санитарной обработке.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "education_lab_safety",
+    "title": "Безопасность в учебной лаборатории",
+    "expected_profile": "education",
+    "payload": {
+      "task": "Составить инструкцию для преподавателя по подготовке учебной лаборатории к практическому занятию",
+      "user_level": "engineer",
+      "instruction_type": "workplace_preparation",
+      "industry_profile": "education",
+      "department": "Учебная лаборатория",
+      "equipment": "Лабораторные стенды и инструмент",
+      "operation_name": "Подготовка лаборатории к занятию",
+      "technical_context": "Проверить исправность стендов, наличие СИЗ, журнал допуска, возрастные ограничения, наблюдение преподавателя и запрет самостоятельных опасных действий учащихся.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "food_line_sanitation",
+    "title": "Санитарная подготовка пищевой линии",
+    "expected_profile": "food_production",
+    "payload": {
+      "task": "Подготовить инструкцию по санитарной проверке пищевой производственной линии перед запуском",
+      "user_level": "experienced_operator",
+      "instruction_type": "inspection",
+      "industry_profile": "food_production",
+      "department": "Пищевое производство",
+      "equipment": "Фасовочная линия",
+      "operation_name": "Санитарная проверка перед запуском",
+      "technical_context": "Проверить санитарное состояние, отсутствие посторонних предметов, маркировку партии, чистоту контактных поверхностей, СИЗ и фиксацию результатов контроля.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "transport_pretrip",
+    "title": "Предрейсовый контроль транспорта",
+    "expected_profile": "transport",
+    "payload": {
+      "task": "Составить инструкцию по предрейсовой проверке служебного автомобиля",
+      "user_level": "experienced_operator",
+      "instruction_type": "inspection",
+      "industry_profile": "transport",
+      "department": "Транспортный отдел",
+      "equipment": "Служебный автомобиль",
+      "operation_name": "Предрейсовая проверка",
+      "technical_context": "Проверить документы, внешний осмотр, шины, световые приборы, аптечку, огнетушитель, отсутствие видимых неисправностей и порядок запрета выезда при дефекте.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "information_security_phishing",
+    "title": "Реагирование на подозрительное письмо",
+    "expected_profile": "information_security",
+    "payload": {
+      "task": "Подготовить инструкцию для сотрудника при получении подозрительного письма с вложением",
+      "user_level": "new_operator",
+      "instruction_type": "general",
+      "industry_profile": "information_security",
+      "department": "Офис",
+      "equipment": "Рабочая станция сотрудника",
+      "operation_name": "Реагирование на фишинговое письмо",
+      "technical_context": "Не открывать вложение, не переходить по ссылкам, сохранить письмо, сообщить ответственному за ИБ, не пересылать пароли и персональные данные.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "warehouse_forklift_area",
+    "title": "Проверка зоны работы погрузчика",
+    "expected_profile": "occupational_safety",
+    "payload": {
+      "task": "Составить инструкцию по проверке складской зоны перед работой погрузчика",
+      "user_level": "experienced_operator",
+      "instruction_type": "inspection",
+      "industry_profile": "occupational_safety",
+      "department": "Склад",
+      "equipment": "Погрузчик и зона движения",
+      "operation_name": "Проверка зоны движения погрузчика",
+      "technical_context": "Проверить проходы, разметку, отсутствие людей в опасной зоне, устойчивость груза, освещение, СИЗ и порядок остановки при обнаружении риска.",
+      "max_sources": 15
+    }
+  },
+  {
+    "id": "general_office_equipment",
+    "title": "Подготовка офисного оборудования",
+    "expected_profile": "general",
+    "payload": {
+      "task": "Составить инструкцию по подготовке рабочего места перед использованием офисного оборудования",
+      "user_level": "new_operator",
+      "instruction_type": "workplace_preparation",
+      "industry_profile": "general",
+      "department": "Офис",
+      "equipment": "Принтер и рабочее место",
+      "operation_name": "Подготовка офисного рабочего места",
+      "technical_context": "Проверить исправность кабелей, отсутствие повреждений, доступность инструкции, чистоту зоны, отсутствие влаги и порядок сообщения о неисправности.",
+      "max_sources": 15
+    }
+  }
+]

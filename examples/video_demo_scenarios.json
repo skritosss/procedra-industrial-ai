@@ -1,0 +1,57 @@
+[
+  {
+    "id": "manufacturing_machine_setup_video",
+    "title": "Подготовка производственного оборудования по видео",
+    "industry_profile": "manufacturing",
+    "instruction_type": "equipment_startup",
+    "url": "",
+    "search_hint": "YouTube: подготовка станка к работе техника безопасности",
+    "expected_visual_signals": ["оборудование", "рабочая зона", "оператор", "проверка перед запуском"],
+    "expected_text_signals": ["подготовка", "безопасность", "проверка"],
+    "notes": "Подставить публичный URL обучающего видео перед ручным или интеграционным прогоном."
+  },
+  {
+    "id": "construction_site_safety_video",
+    "title": "Проверка строительной площадки по видео",
+    "industry_profile": "construction",
+    "instruction_type": "inspection",
+    "url": "",
+    "search_hint": "YouTube: инструктаж строительная площадка охрана труда",
+    "expected_visual_signals": ["стройплощадка", "ограждение", "сиз", "проходы"],
+    "expected_text_signals": ["инструктаж", "строительная площадка", "охрана труда"],
+    "notes": "Использовать ролик, где видна площадка, а не только говорящая голова."
+  },
+  {
+    "id": "fire_emergency_response_video",
+    "title": "Действия при пожарной тревоге по видео",
+    "industry_profile": "emergency_response",
+    "instruction_type": "general",
+    "url": "",
+    "search_hint": "YouTube: действия при пожаре эвакуация инструкция",
+    "expected_visual_signals": ["эвакуация", "выход", "огнетушитель", "план эвакуации"],
+    "expected_text_signals": ["пожар", "эвакуация", "оповещение"],
+    "notes": "Предпочтительно видео с демонстрацией последовательности действий."
+  },
+  {
+    "id": "healthcare_room_preparation_video",
+    "title": "Подготовка кабинета или рабочего места медработника по видео",
+    "industry_profile": "healthcare",
+    "instruction_type": "workplace_preparation",
+    "url": "",
+    "search_hint": "YouTube: подготовка процедурного кабинета санитарная обработка",
+    "expected_visual_signals": ["рабочая поверхность", "сиз", "контейнеры", "расходные материалы"],
+    "expected_text_signals": ["санитарная обработка", "подготовка", "безопасность"],
+    "notes": "Не использовать видео с медицинскими манипуляциями над пациентом для публичного демо."
+  },
+  {
+    "id": "information_security_phishing_video",
+    "title": "Реагирование на фишинговое письмо по видео",
+    "industry_profile": "information_security",
+    "instruction_type": "general",
+    "url": "",
+    "search_hint": "YouTube: фишинговое письмо что делать инструкция сотрудника",
+    "expected_visual_signals": ["почтовый клиент", "ссылка", "вложение", "сообщение"],
+    "expected_text_signals": ["фишинг", "подозрительное письмо", "не открывать"],
+    "notes": "Проверяет способность системы работать не только с промышленной картинкой."
+  }
+]

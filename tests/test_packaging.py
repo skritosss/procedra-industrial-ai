@@ -1,0 +1,325 @@
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from app.core.settings import Settings
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _read(path: str) -> str:
+    return (PROJECT_ROOT / path).read_text(encoding="utf-8")
+
+
+def test_dockerfile_uses_non_root_runtime_and_healthcheck() -> None:
+    dockerfile = _read("Dockerfile")
+
+    assert "FROM python:3.12-slim" in dockerfile
+    assert "OPENAI_ENABLED=false" in dockerfile
+    assert "PUBLIC_SOURCES_ENABLED=true" in dockerfile
+    assert "PUBLIC_SOURCES_MAX_RESULTS=15" in dockerfile
+    assert "DATABASE_PATH=/app/generated/app.sqlite3" in dockerfile
+    assert "METRICS_DATABASE_PATH=/app/generated/metrics.sqlite3" in dockerfile
+    assert "VIDEO_MAX_DURATION_SECONDS=1800" in dockerfile
+    assert "fonts-dejavu-core" in dockerfile
+    assert "libgomp1" in dockerfile
+    assert "mkdir -p /app/generated/keyframes /app/uploads/videos" in dockerfile
+    assert "COPY scripts/manage_database.py ./scripts/manage_database.py" in dockerfile
+    assert "COPY scripts/reconcile_document_ownership.py ./scripts/reconcile_document_ownership.py" in dockerfile
+    assert "USER appuser" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+    assert "urllib.request.urlopen('http://127.0.0.1:8000/ready'" in dockerfile
+
+
+def test_dockerignore_excludes_secrets_and_runtime_artifacts() -> None:
+    dockerignore = _read(".dockerignore").splitlines()
+
+    assert ".env" in dockerignore
+    assert ".env.*" in dockerignore
+    assert "!.env.example" in dockerignore
+    assert ".venv" in dockerignore
+    assert "generated/" in dockerignore
+    assert "uploads/" in dockerignore
+
+
+def test_env_example_is_safe_for_deterministic_local_demo() -> None:
+    env_example = _read(".env.example")
+
+    assert "OPENAI_ENABLED=false" in env_example
+    assert "OPENAI_API_KEY=" in env_example
+    assert "Set OPENAI_ENABLED=true" in env_example
+    assert "VIDEO_MAX_BYTES=262144000" in env_example
+    assert "VIDEO_MAX_DURATION_SECONDS=1800" in env_example
+    assert "VIDEO_NETWORK_TIMEOUT_SECONDS=15" in env_example
+    assert "VISION_MAX_KEYFRAMES=8" in env_example
+    assert "VISION_MAX_IMAGE_BYTES=5242880" in env_example
+    assert "DATABASE_PATH=generated/app.sqlite3" in env_example
+    assert "METRICS_DATABASE_PATH=generated/metrics.sqlite3" in env_example
+    assert "METRICS_AVAILABILITY_SLO_PERCENT=99" in env_example
+    assert "METRICS_LATENCY_SLO_PERCENT=95" in env_example
+    assert "PUBLIC_SOURCES_ENABLED=true" in env_example
+    assert "PUBLIC_SOURCES_MAX_RESULTS=15" in env_example
+    assert "APP_PORT=8000" in env_example
+    assert "APP_BIND_HOST=127.0.0.1" in env_example
+
+
+def test_requirements_include_testclient_compatibility_dependency() -> None:
+    requirements = _read("requirements.txt")
+
+    assert "httpx2>=2.3.0,<3.0.0" in requirements
+    assert "reportlab>=4.2.0,<5.0.0" in requirements
+    assert "mypy>=1.16.0,<2.0.0" in requirements
+
+
+def test_compose_defaults_to_deterministic_demo_mode_and_persistent_volumes() -> None:
+    compose = _read("docker-compose.yml")
+
+    assert 'OPENAI_ENABLED: "${OPENAI_ENABLED:-false}"' in compose
+    assert 'VIDEO_NETWORK_TIMEOUT_SECONDS: "${VIDEO_NETWORK_TIMEOUT_SECONDS:-15}"' in compose
+    assert 'VIDEO_MAX_DURATION_SECONDS: "${VIDEO_MAX_DURATION_SECONDS:-1800}"' in compose
+    assert 'PUBLIC_SOURCES_ENABLED: "${PUBLIC_SOURCES_ENABLED:-true}"' in compose
+    assert 'PUBLIC_SOURCES_MAX_RESULTS: "${PUBLIC_SOURCES_MAX_RESULTS:-15}"' in compose
+    assert 'DATABASE_PATH: "${DATABASE_PATH:-/app/generated/app.sqlite3}"' in compose
+    assert 'METRICS_DATABASE_PATH: "${METRICS_DATABASE_PATH:-/app/generated/metrics.sqlite3}"' in compose
+    assert '"${APP_BIND_HOST:-127.0.0.1}:${APP_PORT:-8000}:8000"' in compose
+    assert "init: true" in compose
+    assert "- generated-data:/app/generated" in compose
+    assert "- upload-data:/app/uploads" in compose
+    assert "healthcheck:" in compose
+    assert "urllib.request.urlopen('http://127.0.0.1:8000/ready'" in compose
+    assert "restart: unless-stopped" in compose
+
+
+def test_deployment_doc_includes_repeatable_smoke_checklist() -> None:
+    deployment = _read("docs/deployment.md")
+
+    assert "Production Smoke Checklist" in deployment
+    assert "python -m compileall -q app tests scripts" in deployment
+    assert "python -m pytest -q" in deployment
+    assert "docker compose config" in deployment
+    assert "curl http://127.0.0.1:8000/health" in deployment
+    assert "/api/instructions/generate" in deployment
+    assert "PUBLIC_SOURCES_MAX_RESULTS" in deployment
+    assert "make docker-config" in deployment
+    assert "manage_database.py backup" in deployment
+    assert "manage_database.py restore" in deployment
+    assert "pre-restore safety backup" in deployment
+
+
+def test_partner_demo_doc_includes_live_demo_contract() -> None:
+    partner_demo = _read("docs/partner_demo.md")
+
+    assert "make smoke" in partner_demo
+    assert "make demo-eval" in partner_demo
+    assert "source count set to 15" in partner_demo
+    assert "PDF export" in partner_demo
+    assert "Honest Boundaries" in partner_demo
+    assert "not invented by the system" in partner_demo
+
+
+def test_ci_runs_compile_tests_docker_build_and_compose_validation() -> None:
+    workflow = _read(".github/workflows/ci.yml")
+
+    assert "permissions:" in workflow
+    assert "contents: read" in workflow
+    assert "concurrency:" in workflow
+    assert "python -m compileall -q app tests scripts" in workflow
+    assert "python -m pip check" in workflow
+    assert "python -m mypy app scripts" in workflow
+    assert "python -m pytest -q" in workflow
+    assert "docker build -t industrial-instruction-ai:ci ." in workflow
+    assert "docker compose config" in workflow
+    assert "libgomp1" in workflow
+
+
+def test_makefile_exposes_repeatable_project_commands() -> None:
+    makefile = _read("Makefile")
+
+    assert "PYTHON ?= python3.12" in makefile
+    assert "install:" in makefile
+    assert "$(PYTHON) -m venv $(VENV)" in makefile
+    assert ".env.local:" in makefile
+    assert "cp .env.example .env.local" in makefile
+    assert "env: .env.local" in makefile
+    assert "$(APP_PYTHON) -m pip install -r requirements.txt" in makefile
+    assert "run:" in makefile
+    assert "test:" in makefile
+    assert "compile:" in makefile
+    assert "typecheck:" in makefile
+    assert "$(APP_PYTHON) -m mypy app scripts" in makefile
+    assert "pip-check:" in makefile
+    assert "demo-eval:" in makefile
+    assert "$(APP_PYTHON) scripts/run_demo_eval.py" in makefile
+    assert "CLEANUP_MAX_AGE_HOURS ?= 24" in makefile
+    assert "cleanup-plan:" in makefile
+    assert "scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS)" in makefile
+    assert "cleanup-delete:" in makefile
+    assert "scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS) --delete" in makefile
+    assert "scripts/reconcile_document_ownership.py --database \"$(DATABASE)\"" in makefile
+    assert "scripts/reconcile_document_ownership.py --database \"$(DATABASE)\" --apply" in makefile
+    assert "smoke:" in makefile
+    assert "api-smoke:" in makefile
+    assert "health:" in makefile
+    assert "docker-build:" in makefile
+    assert "docker-config:" in makefile
+    assert "docker compose config" in makefile
+    assert "curl -fsS http://$(HOST):$(PORT)/health" in makefile
+    assert "ready:" in makefile
+    assert "curl -fsS http://$(HOST):$(PORT)/ready" in makefile
+    assert "metrics:" in makefile
+    assert "curl -fsS http://$(HOST):$(PORT)/metrics" in makefile
+    assert "TestClient(app)" in makefile
+
+
+def test_settings_default_to_safe_demo_mode_and_strip_blank_api_key() -> None:
+    settings = Settings(_env_file=None, openai_api_key="   ")
+
+    assert settings.openai_enabled is False
+    assert settings.openai_api_key is None
+    assert settings.database_path.name == "app.sqlite3"
+    assert settings.metrics_database_path.name == "metrics.sqlite3"
+    assert settings.public_sources_enabled is True
+    assert settings.public_sources_max_results == 15
+
+
+def test_settings_require_separate_metrics_storage_and_valid_retention() -> None:
+    with pytest.raises(ValidationError, match="must be separate"):
+        Settings(
+            _env_file=None,
+            database_path="shared.sqlite3",
+            metrics_database_path="shared.sqlite3",
+        )
+    with pytest.raises(ValidationError, match="must be at least"):
+        Settings(
+            _env_file=None,
+            metrics_window_seconds=7_200,
+            metrics_retention_seconds=3_600,
+        )
+
+
+@pytest.mark.parametrize("raw_value", ["", "   ", " , , "])
+def test_settings_accept_empty_video_allowed_hosts(monkeypatch: pytest.MonkeyPatch, raw_value: str) -> None:
+    monkeypatch.setenv("VIDEO_ALLOWED_HOSTS", raw_value)
+
+    assert Settings(_env_file=None).video_allowed_hosts == ()
+
+
+def test_settings_parse_video_allowed_hosts_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "VIDEO_ALLOWED_HOSTS",
+        " YouTube.com, youtu.be, youtube.com, .RUTUBE.RU. ",
+    )
+
+    assert Settings(_env_file=None).video_allowed_hosts == ("rutube.ru", "youtu.be", "youtube.com")
+
+
+def test_settings_reject_unsafe_production_auth_configuration() -> None:
+    with pytest.raises(ValidationError, match="Unsafe production configuration"):
+        Settings(_env_file=None, deployment_mode="production")
+
+
+def test_settings_reject_short_production_bootstrap_token() -> None:
+    with pytest.raises(ValidationError, match="at least 32 characters"):
+        Settings(
+            _env_file=None,
+            deployment_mode="production",
+            api_access_token="too-short",
+            auth_public_registration_enabled=False,
+            auth_allow_role_self_assignment=False,
+            auth_min_password_length=12,
+        )
+
+
+def test_settings_accept_hardened_production_auth_configuration() -> None:
+    settings = Settings(
+        _env_file=None,
+        deployment_mode="production",
+        api_access_token="production-bootstrap-token-at-least-32-chars",
+        auth_public_registration_enabled=False,
+        auth_allow_role_self_assignment=False,
+        auth_min_password_length=12,
+        video_allowed_hosts="youtube.com,youtu.be",
+    )
+
+    assert settings.deployment_mode == "production"
+    assert settings.auth_public_registration_enabled is False
+    assert settings.auth_allow_role_self_assignment is False
+    assert settings.video_allowed_hosts == ("youtu.be", "youtube.com")
+
+
+def test_settings_reject_production_without_video_host_allowlist() -> None:
+    with pytest.raises(ValidationError, match="VIDEO_ALLOWED_HOSTS"):
+        Settings(
+            _env_file=None,
+            deployment_mode="production",
+            api_access_token="production-bootstrap-token-at-least-32-chars",
+            auth_public_registration_enabled=False,
+            auth_allow_role_self_assignment=False,
+            auth_min_password_length=12,
+        )
+
+
+def test_settings_reject_unsafe_trusted_proxy_configuration() -> None:
+    with pytest.raises(ValidationError, match="TRUSTED_PROXY_IPS"):
+        Settings(
+            _env_file=None,
+            deployment_mode="production",
+            api_access_token="production-bootstrap-token-at-least-32-chars",
+            auth_public_registration_enabled=False,
+            auth_allow_role_self_assignment=False,
+            auth_min_password_length=12,
+            trust_proxy_headers=True,
+        )
+
+
+def test_settings_parse_trusted_proxy_ips() -> None:
+    settings = Settings(
+        _env_file=None,
+        trusted_proxy_ips="127.0.0.1, ::1,127.0.0.1",
+    )
+
+    assert settings.trusted_proxy_ips == ("127.0.0.1", "::1")
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    ["https://youtube.com", "youtube.com/watch", "youtube.com:443", "*.youtube.com", "bad host"],
+)
+def test_settings_reject_malformed_video_allowed_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_value: str,
+) -> None:
+    monkeypatch.setenv("VIDEO_ALLOWED_HOSTS", raw_value)
+
+    with pytest.raises(ValidationError, match="Invalid host in VIDEO_ALLOWED_HOSTS"):
+        Settings(_env_file=None)
+
+
+def test_settings_reject_unsafe_runtime_limits() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, video_max_bytes=0)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, video_network_timeout_seconds=0)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, video_max_duration_seconds=0)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, vision_max_keyframes=100)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, public_sources_max_results=16)
+
+
+def test_settings_reject_invalid_timeout_and_image_limits() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, openai_timeout_seconds=0)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, vision_max_image_bytes=1)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, video_max_bytes=3 * 1024 * 1024 * 1024)

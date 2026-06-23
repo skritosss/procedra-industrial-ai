@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="application-name" content="Procedra" />
+    <meta name="description" content="Procedra — AI-assisted industrial procedures with source traceability, expert approval, and execution evidence." />
+    <meta name="theme-color" content="#17212B" />
+    <title>Procedra — генератор производственных инструкций</title>
+    <link rel="icon" href="/static/assets/brand/procedra-favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/assets/brand/procedra-favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/static/assets/brand/procedra-apple-touch-icon.png" />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="primary-sidebar" aria-label="Основная навигация">
+        <div class="sidebar-brand">
+          <img class="sidebar-wordmark" src="/static/assets/brand/procedra-wordmark-reversed.svg" alt="Procedra" />
+          <img class="sidebar-brandmark" src="/static/assets/brand/procedra-favicon.svg" alt="" aria-hidden="true" />
+          <button class="mobile-menu-close" id="mobile-menu-close" type="button" aria-controls="primary-sidebar" data-i18n-aria-label="mobileMenuClose">
+            <img src="/static/vendor/tabler-icons/x.svg" alt="" aria-hidden="true" />
+          </button>
+        </div>
+        <nav class="sidebar-nav">
+          <button class="sidebar-link is-active" type="button" data-sidebar-target="generator" data-i18n-aria-label="navGenerator"><img src="/static/vendor/tabler-icons/file-pencil.svg" alt="" aria-hidden="true" /><span data-i18n="navGenerator"></span></button>
+          <button class="sidebar-link" id="nav-instruction" type="button" data-sidebar-target="instruction" data-result-view="instruction" aria-controls="result" data-i18n-aria-label="navInstructions"><img src="/static/vendor/tabler-icons/file-text.svg" alt="" aria-hidden="true" /><span data-i18n="navInstructions"></span></button>
+          <button class="sidebar-link" id="nav-editor" type="button" data-sidebar-target="editor" data-result-view="editor" aria-controls="result" data-i18n-aria-label="navEditor"><img src="/static/vendor/tabler-icons/edit.svg" alt="" aria-hidden="true" /><span data-i18n="navEditor"></span></button>
+          <button class="sidebar-link" id="nav-execution" type="button" data-sidebar-target="execution" data-result-view="execution" aria-controls="result" data-i18n-aria-label="navExecution"><img src="/static/vendor/tabler-icons/list-check.svg" alt="" aria-hidden="true" /><span data-i18n="navExecution"></span></button>
+          <button class="sidebar-link" id="nav-evaluation" type="button" data-sidebar-target="evaluation" data-result-view="evaluation" aria-controls="result" data-i18n-aria-label="navEvaluation"><img src="/static/vendor/tabler-icons/clipboard-check.svg" alt="" aria-hidden="true" /><span data-i18n="navEvaluation"></span></button>
+          <button class="sidebar-link" id="nav-sources" type="button" data-sidebar-target="sources" data-result-view="sources" aria-controls="result" data-i18n-aria-label="navSources"><img src="/static/vendor/tabler-icons/database.svg" alt="" aria-hidden="true" /><span data-i18n="navSources"></span></button>
+          <button class="sidebar-link" id="nav-video" type="button" data-sidebar-target="video" data-result-view="video" aria-controls="result" data-i18n-aria-label="navVideo"><img src="/static/vendor/tabler-icons/video.svg" alt="" aria-hidden="true" /><span data-i18n="navVideo"></span></button>
+          <button class="sidebar-link" id="nav-history" type="button" data-sidebar-target="history" data-result-view="history" aria-controls="result" data-i18n-aria-label="navHistory"><img src="/static/vendor/tabler-icons/history.svg" alt="" aria-hidden="true" /><span data-i18n="navHistory"></span></button>
+          <div class="sidebar-divider" role="presentation"></div>
+          <button class="sidebar-link" id="nav-markdown" type="button" data-sidebar-target="markdown" data-result-view="markdown" aria-controls="result" data-i18n-aria-label="navMarkdown"><img src="/static/vendor/tabler-icons/markdown.svg" alt="" aria-hidden="true" /><span data-i18n="navMarkdown"></span></button>
+          <button class="sidebar-link" id="nav-json" type="button" data-sidebar-target="json" data-result-view="json" aria-controls="result" data-i18n-aria-label="navJson"><img src="/static/vendor/tabler-icons/braces.svg" alt="" aria-hidden="true" /><span data-i18n="navJson"></span></button>
+        </nav>
+        <button class="sidebar-collapse" id="sidebar-collapse" type="button" aria-expanded="true" data-i18n-aria-label="navCollapse"><img src="/static/vendor/tabler-icons/chevron-left.svg" alt="" aria-hidden="true" /><span data-i18n="navCollapse"></span></button>
+      </aside>
+      <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+
+      <div class="app-frame">
+      <header>
+        <div class="topbar">
+          <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="primary-sidebar" aria-expanded="false" data-i18n-aria-label="mobileMenuOpen">
+            <img src="/static/vendor/tabler-icons/menu-2.svg" alt="" aria-hidden="true" />
+          </button>
+          <div class="brand">
+            <img class="mobile-brand" src="/static/assets/brand/procedra-wordmark.svg" alt="Procedra" />
+            <div>
+              <h1 data-i18n="subtitle"></h1>
+              <p data-i18n="workspaceContext"></p>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <div class="auth-panel">
+              <span id="auth-state" data-i18n="authGuest"></span>
+              <button type="button" id="auth-open" data-i18n="authOpen"></button>
+              <button type="button" id="auth-logout" data-i18n="authLogout" hidden></button>
+            </div>
+            <div class="language-switch" role="group" aria-label="Language">
+              <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+              <button type="button" data-lang="en" aria-pressed="false">EN</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="panel">
+          <div class="panel-header">
+            <h2 data-i18n="formTitle"></h2>
+            <p data-i18n="formSubtitle"></p>
+          </div>
+          <form id="instruction-form">
+            <div class="field inline-action">
+              <div>
+                <label for="sample_case" data-i18n="sampleCaseLabel"></label>
+                <select id="sample_case"></select>
+              </div>
+              <button class="secondary-action" id="sample-button" type="button" data-i18n="sampleCaseButton"></button>
+            </div>
+
+            <div class="field">
+              <label for="task" data-i18n="taskLabel"></label>
+              <textarea id="task" name="task" required minlength="10"></textarea>
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label for="user_level" data-i18n="userLevelLabel"></label>
+                <select id="user_level" name="user_level"></select>
+              </div>
+              <div class="field">
+                <label for="instruction_type" data-i18n="instructionTypeLabel"></label>
+                <select id="instruction_type" name="instruction_type"></select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="industry_profile" data-i18n="industryProfileLabel"></label>
+              <select id="industry_profile" name="industry_profile"></select>
+            </div>
+
+            <div class="field">
+              <label for="operation_name" data-i18n="operationLabel"></label>
+              <input id="operation_name" name="operation_name" />
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label for="department" data-i18n="departmentLabel"></label>
+                <input id="department" name="department" />
+              </div>
+              <div class="field">
+                <label for="equipment" data-i18n="equipmentLabel"></label>
+                <input id="equipment" name="equipment" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="technical_context" data-i18n="contextLabel"></label>
+              <textarea id="technical_context" name="technical_context"></textarea>
+            </div>
+
+            <label class="checkbox-field">
+              <input id="use_context" name="use_context" type="checkbox" checked />
+              <span data-i18n="useContextLabel"></span>
+            </label>
+
+            <div class="field">
+              <label for="api_token" data-i18n="apiTokenLabel"></label>
+              <input id="api_token" type="password" autocomplete="off" />
+            </div>
+
+            <div class="field">
+              <label for="max_sources" data-i18n="maxSourcesLabel"></label>
+              <select id="max_sources" name="max_sources">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="12">12</option>
+                <option value="15" selected>15</option>
+              </select>
+            </div>
+
+            <button class="primary-action" type="submit" data-i18n="generateButton"></button>
+          </form>
+          <div class="video-panel">
+            <div class="field">
+              <label for="video_url" data-i18n="videoUrlLabel"></label>
+              <input id="video_url" type="url" />
+            </div>
+            <div class="field">
+              <label for="video_file" data-i18n="videoFileLabel"></label>
+              <input id="video_file" type="file" accept="video/*" />
+            </div>
+            <div class="field">
+              <label for="max_keyframes" data-i18n="maxKeyframesLabel"></label>
+              <select id="max_keyframes">
+                <option value="4">4</option>
+                <option value="8" selected>8</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="visual_quality" data-i18n="visualQualityLabel"></label>
+              <select id="visual_quality">
+                <option value="240" data-i18n="visualQualityFast"></option>
+                <option value="360" data-i18n="visualQualityBalanced"></option>
+                <option value="720" selected data-i18n="visualQualityDetailed"></option>
+                <option value="1080" data-i18n="visualQualityMax"></option>
+              </select>
+            </div>
+            <button class="secondary-action" id="video-button" type="button" data-i18n="extractVideoButton"></button>
+            <button class="secondary-action" id="video-generate-button" type="button" data-i18n="generateFromVideoButton"></button>
+          </div>
+
+          <div class="document-panel">
+            <div class="field">
+              <label for="document_file" data-i18n="documentFileLabel"></label>
+              <input id="document_file" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" />
+            </div>
+            <button class="secondary-action" id="document-button" type="button" data-i18n="uploadDocumentButton"></button>
+            <div id="document-list" class="document-list" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="panel result-panel">
+          <div class="panel-header">
+            <h2 data-i18n="resultTitle"></h2>
+            <p data-i18n="resultSubtitle"></p>
+          </div>
+          <div class="result-toolbar">
+            <div class="result-actions">
+              <button class="export-action" id="improve-instruction" type="button" data-i18n="improveInstruction" disabled></button>
+              <button class="export-action" id="save-history" type="button" data-i18n="saveHistory" disabled></button>
+              <button class="export-action" id="export-markdown" type="button" data-i18n="exportMarkdown" disabled></button>
+              <button class="export-action" id="export-pdf" type="button" data-i18n="exportPdf" disabled></button>
+              <button class="export-action" id="export-json" type="button" data-i18n="exportJson" disabled></button>
+              <div id="status" class="status" role="status" aria-live="polite" data-i18n="statusIdle"></div>
+            </div>
+          </div>
+          <div id="result" class="result-body" role="region" aria-labelledby="nav-instruction"></div>
+        </section>
+      </main>
+      </div>
+    </div>
+
+    <div id="auth-modal" class="modal-backdrop" hidden>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+        <form id="auth-form">
+          <h3 id="auth-modal-title" data-i18n="authTitle"></h3>
+          <div class="field">
+            <label for="auth_mode" data-i18n="authMode"></label>
+            <select id="auth_mode">
+              <option value="login" data-i18n="authModeLogin"></option>
+              <option value="register" data-i18n="authModeRegister"></option>
+            </select>
+          </div>
+          <div class="field" data-auth-register-only>
+            <label for="auth_full_name" data-i18n="authFullName"></label>
+            <input id="auth_full_name" type="text" minlength="2" maxlength="120" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="auth_email" data-i18n="authEmail"></label>
+            <input id="auth_email" type="email" required autocomplete="email" />
+          </div>
+          <div class="field">
+            <label for="auth_password" data-i18n="authPassword"></label>
+            <input id="auth_password" type="password" required minlength="8" maxlength="128" autocomplete="current-password" />
+          </div>
+          <div class="field" data-auth-register-only>
+            <label for="auth_role" data-i18n="authRole"></label>
+            <select id="auth_role"></select>
+          </div>
+          <div class="inline-actions">
+            <button class="primary-action" type="submit" data-i18n="authSubmit"></button>
+            <button class="secondary-action" id="auth-cancel" type="button" data-i18n="workflowCancel"></button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="workflow-modal" class="modal-backdrop" hidden>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
+        <form id="workflow-form">
+          <h3 id="workflow-modal-title" data-i18n="workflowDecisionTitle"></h3>
+          <div class="field">
+            <label for="workflow_reviewer" data-i18n="historyReviewer"></label>
+            <input id="workflow_reviewer" type="text" required minlength="2" maxlength="120" />
+          </div>
+          <div class="field">
+            <label for="workflow_reviewer_role" data-i18n="workflowReviewerRole"></label>
+            <select id="workflow_reviewer_role" required></select>
+          </div>
+          <div class="field">
+            <label for="workflow_comment" data-i18n="historyComment"></label>
+            <textarea id="workflow_comment" required minlength="5" maxlength="1000"></textarea>
+          </div>
+          <div class="field">
+            <label for="workflow_resolved_blockers" data-i18n="workflowResolvedBlockers"></label>
+            <textarea id="workflow_resolved_blockers" data-i18n-placeholder="workflowResolvedBlockersPlaceholder"></textarea>
+          </div>
+          <div class="inline-actions">
+            <button class="primary-action" type="submit" data-i18n="workflowSubmit"></button>
+            <button class="secondary-action" id="workflow-cancel" type="button" data-i18n="workflowCancel"></button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

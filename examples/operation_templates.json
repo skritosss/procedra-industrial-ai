@@ -1,0 +1,90 @@
+[
+  {
+    "id": "workplace_preparation",
+    "title_ru": "Подготовка рабочего места",
+    "title_en": "Workplace preparation",
+    "category": "manufacturing",
+    "instruction_type": "workplace_preparation",
+    "industry_profile": "manufacturing"
+  },
+  {
+    "id": "equipment_startup",
+    "title_ru": "Подготовка оборудования к запуску",
+    "title_en": "Equipment startup preparation",
+    "category": "manufacturing",
+    "instruction_type": "equipment_startup",
+    "industry_profile": "manufacturing"
+  },
+  {
+    "id": "equipment_shutdown",
+    "title_ru": "Остановка и передача смены",
+    "title_en": "Shutdown and shift handover",
+    "category": "manufacturing",
+    "instruction_type": "equipment_shutdown",
+    "industry_profile": "manufacturing"
+  },
+  {
+    "id": "inspection_guarding",
+    "title_ru": "Осмотр ограждений и аварийной остановки",
+    "title_en": "Guarding and emergency-stop inspection",
+    "category": "safety",
+    "instruction_type": "inspection",
+    "industry_profile": "occupational_safety"
+  },
+  {
+    "id": "maintenance_lockout",
+    "title_ru": "ТО с отключением энергии",
+    "title_en": "Maintenance with energy isolation",
+    "category": "maintenance",
+    "instruction_type": "maintenance",
+    "industry_profile": "manufacturing"
+  },
+  {
+    "id": "construction_hot_work",
+    "title_ru": "Допуск к огневым работам",
+    "title_en": "Hot-work permit preparation",
+    "category": "construction",
+    "instruction_type": "workplace_preparation",
+    "industry_profile": "construction"
+  },
+  {
+    "id": "emergency_evacuation",
+    "title_ru": "Эвакуация при пожарной тревоге",
+    "title_en": "Fire alarm evacuation",
+    "category": "emergency",
+    "instruction_type": "training",
+    "industry_profile": "emergency_response"
+  },
+  {
+    "id": "housing_utilities_gas",
+    "title_ru": "Заявка о запахе газа",
+    "title_en": "Gas smell report handling",
+    "category": "utilities",
+    "instruction_type": "general",
+    "industry_profile": "housing_utilities"
+  },
+  {
+    "id": "food_sanitation",
+    "title_ru": "Санитарная обработка линии",
+    "title_en": "Food line sanitation",
+    "category": "food",
+    "instruction_type": "workplace_preparation",
+    "industry_profile": "food_production"
+  },
+  {
+    "id": "transport_pretrip",
+    "title_ru": "Предрейсовый осмотр транспорта",
+    "title_en": "Pre-trip vehicle inspection",
+    "category": "transport",
+    "instruction_type": "inspection",
+    "industry_profile": "transport"
+  },
+  {
+    "id": "security_phishing",
+    "title_ru": "Фишинговое письмо",
+    "title_en": "Phishing email handling",
+    "category": "information_security",
+    "instruction_type": "training",
+    "industry_profile": "information_security"
+  }
+]

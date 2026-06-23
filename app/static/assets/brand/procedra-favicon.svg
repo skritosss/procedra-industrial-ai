@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Procedra</title>
+  <desc id="desc">Procedra E favicon</desc>
+  <rect width="64" height="64" rx="12" fill="#17212B"/>
+  <path d="M84.96746826171875 0V690H549.1143188476562V579.3131713867188H207.32623291015625V412.7862548828125H519.1143188476562V302.09942626953125H207.32623291015625V110.68682861328125H549.1143188476562V0Z" transform="translate(12 51) scale(0.045 -0.045)" fill="#FFFFFF"/>
+  <rect x="24" y="29" width="23" height="6" rx="2" fill="#42C5B8"/>
+</svg>
