@@ -95,6 +95,7 @@ See also:
 - [Partner demo flow](docs/partner_demo.md)
 - [Production readiness](docs/production_readiness.md)
 - [Portfolio case study](docs/case_study.md)
+- [Pilot offer for customer review](docs/procedra_pilot_for_customer.md)
 - [GitHub publication checklist](docs/github_publication.md)
 
 ## Quick start
@@ -174,6 +175,16 @@ make partner-demo-pack
 ```
 
 This creates a reproducible synthetic evidence pack under the local `reports/partner_demo_pack/` folder with instruction JSON/Markdown/PDF, lifecycle evidence, audit trail, execution run, fallback video, keyframes, and a talk track.
+
+## Research artifact
+
+Procedra is also packaged as a research-informed software artifact for human-in-the-loop industrial AI. The current working paper and SSRN submission materials are kept under [`docs/research/`](docs/research/):
+
+- [`procedra_ssrn_working_paper.md`](docs/research/procedra_ssrn_working_paper.md) — working paper source.
+- [`procedra_ssrn_submission_package.md`](docs/research/procedra_ssrn_submission_package.md) — copy-paste metadata for SSRN.
+- [`procedra_ssrn_final_upload_checklist_for_alexander.md`](docs/research/procedra_ssrn_final_upload_checklist_for_alexander.md) — final submission checklist.
+
+The paper frames the project as a controlled local-demo prototype and source-supported workflow artifact. It does not claim production deployment, certified compliance, customer validation, revenue, measured productivity gains, or replacement of qualified expert review.
 
 ## API example
 
