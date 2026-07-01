@@ -9,6 +9,32 @@ The project is intentionally built as more than a text generator: it demonstrate
 
 ![Procedra desktop interface](docs/assets/screenshots/procedra-desktop.png)
 
+## Fast demo path
+
+For a quick technical review, run the local app without external AI credentials:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+Then open `http://127.0.0.1:8000/` and use a narrow manufacturing scenario.
+The default configuration is deterministic, so the demo can run without an
+OpenAI API key.
+
+For a shareable controlled walkthrough package:
+
+```bash
+make partner-demo-pack
+```
+
+This creates a synthetic evidence pack under `reports/partner_demo_pack/` with
+instruction artifacts, workflow/audit evidence, video fallback artifacts, a
+seven-minute talk track, and a pilot summary that separates what was tested from
+what was not tested.
+
 ## Why this project exists
 
 Industrial instructions are often prepared manually by technologists, engineers, shift supervisors, and safety specialists. That process is slow, inconsistent, hard to update, and difficult to trace back to source materials or reviewer decisions.
@@ -177,6 +203,11 @@ make partner-demo-pack
 ```
 
 This creates a reproducible synthetic evidence pack under the local `reports/partner_demo_pack/` folder with instruction JSON/Markdown/PDF, lifecycle evidence, audit trail, execution run, fallback video, keyframes, and a talk track.
+
+Use [`docs/procedra_demo_script.md`](docs/procedra_demo_script.md) for a
+seven-minute walkthrough or a 60-90 second recording plan. Use
+[`docs/procedra_outreach_messages.md`](docs/procedra_outreach_messages.md) for
+public-safe feedback and pilot-conversation drafts.
 
 ## Research artifact
 
