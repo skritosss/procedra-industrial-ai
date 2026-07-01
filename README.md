@@ -93,9 +93,11 @@ See also:
 - [Architecture](docs/architecture.md)
 - [Project specification](docs/project_spec.md)
 - [Partner demo flow](docs/partner_demo.md)
+- [Demo script](docs/procedra_demo_script.md)
 - [Production readiness](docs/production_readiness.md)
 - [Portfolio case study](docs/case_study.md)
 - [Pilot offer for customer review](docs/procedra_pilot_for_customer.md)
+- [Pilot outreach messages](docs/procedra_outreach_messages.md)
 - [GitHub publication checklist](docs/github_publication.md)
 
 ## Quick start

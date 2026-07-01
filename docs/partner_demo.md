@@ -30,12 +30,19 @@ temporary database: technologist registration, grounded generation, version
 save, expert review, approval, trial execution evidence, audit trail, PDF
 export, local fallback-video keyframes, semantic stages, and video-grounded
 generation. It saves JSON, Markdown, PDF, a clearly marked synthetic fallback
-video, extracted frames, hashes, and a seven-minute talk track.
+video, extracted frames, hashes, a pilot result summary, and a seven-minute talk
+track.
 
 The included video is deliberately synthetic and proves flow reliability only.
 For the actual meeting, replace it with a short, approved, non-confidential
 partner clip. The core demonstration must not depend on a public video URL or a
 live OpenAI call.
+
+The generated `pilot-summary.md` is the safest artifact to send after a
+walkthrough. It separates what was tested, what was not tested, included
+evidence, and the next controlled-pilot step without claiming production
+readiness, customer validation, safety certification, or measured business
+impact.
 
 If Docker is available:
 
