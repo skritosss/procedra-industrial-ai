@@ -8,7 +8,6 @@ Included public artifacts:
 - `procedra_ssrn_working_paper_pdf_ready.md` - PDF-oriented Markdown source used by the builder.
 - `procedra_ssrn_working_paper.pdf` - generated working paper PDF.
 - `procedra_ssrn_submission_package.md` - SSRN copy-paste metadata.
-- `procedra_ssrn_final_upload_checklist_for_alexander.md` - final upload checklist.
 
 The paper and metadata intentionally avoid unsupported claims about production deployment, certified compliance, customer validation, paid pilots, revenue, measured productivity gains, or replacement of qualified expert review.
 
