@@ -215,7 +215,6 @@ Procedra is also packaged as a research-informed software artifact for human-in-
 
 - [`procedra_ssrn_working_paper.md`](docs/research/procedra_ssrn_working_paper.md) — working paper source.
 - [`procedra_ssrn_submission_package.md`](docs/research/procedra_ssrn_submission_package.md) — copy-paste metadata for SSRN.
-- [`procedra_ssrn_final_upload_checklist_for_alexander.md`](docs/research/procedra_ssrn_final_upload_checklist_for_alexander.md) — final submission checklist.
 
 The paper frames the project as a controlled local-demo prototype and source-supported workflow artifact. It does not claim production deployment, certified compliance, customer validation, revenue, measured productivity gains, or replacement of qualified expert review.
 
@@ -280,8 +279,6 @@ For portfolio and partner-review purposes, Procedra demonstrates:
 
 ## License
 
-License is not selected yet. Before public release, choose whether this repository should be:
+Source-available portfolio code. All rights reserved — see [LICENSE](LICENSE).
 
-- source-available portfolio code with all rights reserved;
-- MIT/Apache-2.0 open source;
-- private repository shared selectively with partners or recruiters.
+The code is published so that it can be read and evaluated. It may not be used, copied, modified, or redistributed without written permission from the author.

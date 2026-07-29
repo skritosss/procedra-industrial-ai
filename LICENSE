@@ -1,0 +1,30 @@
+Copyright (c) 2026 Alex Shuvalov. All rights reserved.
+
+This repository is published as source-available portfolio code.
+
+Permission is granted to any person obtaining a copy of this software to view
+and read the source code for the sole purpose of evaluating the author's work,
+for example in a hiring, partnership, or academic review context.
+
+No other rights are granted. Without prior written permission from the copyright
+holder, you may not:
+
+  - use the software or any part of it, in whole or in part, for any purpose,
+    commercial or non-commercial;
+  - copy, reproduce, publish, or redistribute the software or any part of it;
+  - modify the software or create derivative works based on it;
+  - sublicense, sell, rent, lease, or otherwise transfer rights to it;
+  - remove or alter this notice.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE
+LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Procedra generates draft industrial work instructions. Generated output is not
+approved documentation and must be reviewed by qualified personnel before any
+real-world use. The author accepts no liability for use of generated output.
+
+For licensing enquiries: shuv.aleksandr@icloud.com
