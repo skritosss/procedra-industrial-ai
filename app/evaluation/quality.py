@@ -1,6 +1,7 @@
 import re
 from typing import cast
 
+from app.evaluation.safety import analyze_untrusted_context
 from app.schemas.instruction import (
     CriterionScore,
     EvaluationCriterion,
@@ -8,6 +9,7 @@ from app.schemas.instruction import (
     InstructionEvaluation,
     InstructionRequest,
     RiskLevel,
+    SafetyFinding,
     WorkInstruction,
 )
 
@@ -34,6 +36,9 @@ def evaluate_instruction(
     instruction: WorkInstruction,
     source_request: InstructionRequest | None = None,
 ) -> InstructionEvaluation:
+    safety_findings = analyze_untrusted_context(
+        source_request.technical_context if source_request else None
+    )
     criteria = [
         _score_completeness(instruction),
         _score_clarity(instruction),
@@ -42,24 +47,25 @@ def evaluate_instruction(
         _score_safety(instruction),
         _score_logical_sequence(instruction),
         _score_training_value(instruction),
-        _score_source_grounding(instruction, source_request),
-        _score_domain_risk_control(instruction, source_request),
+        _score_source_grounding(instruction, source_request, safety_findings),
+        _score_domain_risk_control(instruction, source_request, safety_findings),
         _score_implementation_readiness(instruction),
     ]
     overall = round(sum(item.score for item in criteria) / len(criteria))
     missing = _detect_missing_elements(instruction)
-    recommendations = _build_recommendations(criteria, missing)
-    risk_level = cast(RiskLevel, _risk_level(overall, criteria, missing))
-    expert_notes = _expert_review_notes(instruction, source_request, risk_level)
+    recommendations = _build_recommendations(criteria, missing, safety_findings)
+    risk_level = cast(RiskLevel, _risk_level(overall, criteria, missing, safety_findings))
+    expert_notes = _expert_review_notes(instruction, source_request, risk_level, safety_findings)
     return InstructionEvaluation(
         overall_score=overall,
         criteria=criteria,
         missing_elements=missing,
         recommendations=recommendations,
-        verdict=_verdict(overall),
+        verdict=_verdict(overall, safety_findings),
         risk_level=risk_level,
         expert_review_required=True,
         expert_review_notes=expert_notes,
+        safety_findings=safety_findings,
     )
 
 
@@ -208,6 +214,7 @@ def _score_training_value(instruction: WorkInstruction) -> CriterionScore:
 def _score_source_grounding(
     instruction: WorkInstruction,
     source_request: InstructionRequest | None,
+    safety_findings: list[SafetyFinding],
 ) -> CriterionScore:
     context = source_request.technical_context if source_request else ""
     instruction_text = _instruction_text(instruction)
@@ -216,7 +223,13 @@ def _score_source_grounding(
         "контекст отражен в инструкции": not context or _keyword_overlap(context, instruction_text) >= 0.12,
         "нет неподтвержденных точных параметров": not _has_unverified_precise_values(instruction_text),
         "неподтвержденные требования помечены для локальной проверки": _mentions_local_verification(instruction_text),
-        "отделены подтвержденные факты от предположений": bool(instruction.observed_facts),
+        "есть типизированное происхождение утверждений": bool(instruction.evidence_claims),
+        "непроверенные утверждения не помечены подтвержденными": not any(
+            claim.validation_status == "unverified"
+            and any(marker in claim.text.casefold() for marker in ["подтвержденн", "confirmed"])
+            for claim in instruction.evidence_claims
+        ),
+        "нет неразрешенных safety-сигналов во входном контексте": not safety_findings,
         "есть список локальных проверок": len(instruction.local_verification_required) >= 2,
     }
     return _criterion("source_grounding", checks)
@@ -225,6 +238,7 @@ def _score_source_grounding(
 def _score_domain_risk_control(
     instruction: WorkInstruction,
     source_request: InstructionRequest | None,
+    safety_findings: list[SafetyFinding],
 ) -> CriterionScore:
     profile = source_request.industry_profile if source_request else "general"
     text = _instruction_text(instruction).lower()
@@ -233,6 +247,9 @@ def _score_domain_risk_control(
         "есть запрет продолжения при опасности": any(word in text for word in ["не возобновлять", "не продолжать", "запрещ", "остановить"]),
         "учтены профильные риски": _profile_risk_covered(profile, text),
         "нет опасных самовольных действий": not any(word in text for word in ["самостоятельно изменить режим", "обойти блокировку", "отключить защиту"]),
+        "нет критических сигналов в непроверенном контексте": not any(
+            finding.severity == "critical" for finding in safety_findings
+        ),
     }
     return _criterion("domain_risk_control", checks)
 
@@ -291,8 +308,14 @@ def _detect_missing_elements(instruction: WorkInstruction) -> list[str]:
     return missing
 
 
-def _build_recommendations(criteria: list[CriterionScore], missing: list[str]) -> list[str]:
-    recommendations = []
+def _build_recommendations(
+    criteria: list[CriterionScore],
+    missing: list[str],
+    safety_findings: list[SafetyFinding],
+) -> list[str]:
+    recommendations = [
+        f"Safety blocker [{finding.code}]: {finding.message}" for finding in safety_findings
+    ]
     for criterion in criteria:
         if criterion.score < 80 and criterion.issues:
             recommendations.append(f"Усилить критерий «{criterion.label}»: {criterion.issues[0]}.")
@@ -304,7 +327,12 @@ def _build_recommendations(criteria: list[CriterionScore], missing: list[str]) -
     return recommendations[:8]
 
 
-def _verdict(score: int) -> str:
+def _verdict(score: int, safety_findings: list[SafetyFinding]) -> str:
+    if safety_findings:
+        return (
+            "Структурная оценка завершена, но применение заблокировано safety-сигналами "
+            "до проверки и исправления ответственным специалистом."
+        )
     if score >= 90:
         return "Высокое качество: инструкция подходит для демонстрации и дальнейшей экспертной проверки."
     if score >= 75:
@@ -314,7 +342,16 @@ def _verdict(score: int) -> str:
     return "Низкое качество: инструкция недостаточно полная для производственного сценария."
 
 
-def _risk_level(criteria_score: int, criteria: list[CriterionScore], missing: list[str]) -> str:
+def _risk_level(
+    criteria_score: int,
+    criteria: list[CriterionScore],
+    missing: list[str],
+    safety_findings: list[SafetyFinding],
+) -> str:
+    if any(finding.severity == "critical" for finding in safety_findings):
+        return "critical"
+    if safety_findings:
+        return "high"
     weak_safety = any(item.criterion in {"safety", "domain_risk_control"} and item.score < 80 for item in criteria)
     weak_grounding = any(item.criterion == "source_grounding" and item.score < 75 for item in criteria)
     if criteria_score < 60 or (weak_safety and missing):
@@ -330,9 +367,11 @@ def _expert_review_notes(
     instruction: WorkInstruction,
     source_request: InstructionRequest | None,
     risk_level: str,
+    safety_findings: list[SafetyFinding],
 ) -> list[str]:
     profile = source_request.industry_profile if source_request else "general"
     notes = [
+        *[f"Safety blocker [{finding.code}]: {finding.message}" for finding in safety_findings],
         "Проверить актуальность публичных источников и применимость к конкретному объекту/оборудованию.",
         "Подтвердить локальные режимы, допуски, ответственных лиц и форму фиксации результата.",
     ]
@@ -342,7 +381,7 @@ def _expert_review_notes(
         notes.append("Проверить соответствие утвержденным медицинским/аварийным регламентам и полномочиям исполнителей.")
     if risk_level in {"high", "critical"}:
         notes.append("До применения требуется обязательная доработка специалистом профильного направления.")
-    return notes[:5]
+    return notes[:8]
 
 
 def _has_unverified_precise_values(text: str) -> bool:

@@ -1,5 +1,6 @@
 import re
 
+from app.evaluation.safety import enforce_provenance_and_safety
 from app.generation.industry_profiles import profile_guardrails, profile_label
 from app.schemas.instruction import InstructionRequest, InstructionStep, InstructionWorkflow, WorkInstruction
 
@@ -50,7 +51,7 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
         for item in context_bullets[:2]
     ]
 
-    return WorkInstruction(
+    instruction = WorkInstruction(
         title=f"Производственная инструкция: {_truncate_title(operation)}",
         purpose=(
             f"Обеспечить безопасное, проверяемое и воспроизводимое выполнение операции: {operation}. "
@@ -123,6 +124,7 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
         expert_review_questions=expert_questions,
         workflow=_workflow(request, local_verification),
     )
+    return enforce_provenance_and_safety(instruction, request)
 
 
 def _context_bullets(context: str | None) -> list[str]:
@@ -193,7 +195,7 @@ def _observed_facts(
         facts.append(f"Оборудование указано во входных данных: {request.equipment}.")
     if request.operation_name:
         facts.append(f"Название операции указано во входных данных: {request.operation_name}.")
-    facts.extend(f"Подтвержденный контекст запроса/источников: {item}" for item in context_bullets[:3])
+    facts.extend(f"Непроверенное утверждение из входного контекста: {item}" for item in context_bullets[:3])
     return facts[:8]
 
 

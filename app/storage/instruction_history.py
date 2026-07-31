@@ -11,6 +11,8 @@ from pathlib import Path
 from app.core.organization import LEGACY_ORGANIZATION_ID
 from app.core.authorization import default_project_id, register_resource_ownership
 from app.core.settings import get_settings
+from app.evaluation.safety import strip_client_claim_validations
+from app.generation.markdown import render_instruction_markdown
 from app.schemas.history import (
     AuditEventType,
     InstructionAuditEvent,
@@ -23,7 +25,13 @@ from app.schemas.history import (
     InstructionHistoryRecord,
     ReviewerRole,
 )
-from app.schemas.instruction import InstructionLifecycleStatus, InstructionResponse
+from app.schemas.instruction import (
+    ClaimValidationRecord,
+    EvidenceClaim,
+    EvidenceValidatorRole,
+    InstructionLifecycleStatus,
+    InstructionResponse,
+)
 from app.storage.database import apply_migrations, audit_event_hash, connect_database
 
 
@@ -48,6 +56,7 @@ def save_instruction_history(
     actor_role: str | None = None,
     history_dir: Path | None = None,
 ) -> InstructionHistoryRecord:
+    payload = strip_client_claim_validations(payload)
     project_id = project_id or default_project_id(organization_id)
     with closing(_open_storage(history_dir)) as connection:
         try:
@@ -266,6 +275,108 @@ def update_instruction_workflow_status(
             )
             connection.commit()
             return detail.record
+        except Exception:
+            connection.rollback()
+            raise
+
+
+def validate_instruction_claim(
+    instruction_id: str,
+    version: int,
+    claim_id: str,
+    evidence_reference: str,
+    evidence_sha256: str,
+    comment: str,
+    reviewer_user_id: str,
+    reviewer_name: str,
+    reviewer_role: EvidenceValidatorRole,
+    history_dir: Path | None = None,
+    organization_id: str = LEGACY_ORGANIZATION_ID,
+    project_id: str | None = None,
+) -> EvidenceClaim | None:
+    if not _is_safe_instruction_id(instruction_id) or version < 1:
+        return None
+    project_id = project_id or default_project_id(organization_id)
+    with closing(_open_storage(history_dir)) as connection:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            detail = _get_detail(connection, organization_id, project_id, instruction_id, version)
+            if detail is None:
+                connection.rollback()
+                return None
+            claim = next(
+                (
+                    item
+                    for item in detail.payload.instruction.evidence_claims
+                    if item.claim_id == claim_id
+                ),
+                None,
+            )
+            if claim is None:
+                raise ValueError("Evidence claim not found in the saved instruction version")
+            if claim.validation_status == "validated" or claim.validation_record is not None:
+                raise ValueError("Evidence claim is already validated")
+            if claim.provenance not in {"user_claim", "retrieved_unverified"}:
+                raise ValueError("Model-inferred claims cannot be promoted to validated_local")
+            if not claim.source_id:
+                raise ValueError("Evidence claim must have a stable source_id before validation")
+
+            validated_at = datetime.now(UTC)
+            validation_id = os.urandom(16).hex()
+            claim.provenance = "validated_local"
+            claim.validation_status = "validated"
+            claim.requires_local_verification = False
+            claim.validation_record = ClaimValidationRecord(
+                validation_id=validation_id,
+                claim_id=claim_id,
+                evidence_reference=evidence_reference,
+                evidence_sha256=evidence_sha256,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_role=reviewer_role,
+                comment=comment,
+                validated_at=validated_at,
+            )
+            detail.payload.markdown = render_instruction_markdown(
+                detail.payload.instruction,
+                detail.payload.step_frame_links,
+            )
+            connection.execute(
+                """
+                UPDATE instruction_versions
+                SET payload_json = ?, updated_at = ?
+                WHERE organization_id = ? AND project_id = ? AND instruction_id = ? AND version = ?
+                """,
+                (
+                    _model_json(detail.payload),
+                    validated_at.isoformat(),
+                    organization_id,
+                    project_id,
+                    instruction_id,
+                    version,
+                ),
+            )
+            _append_audit_event(
+                connection,
+                organization_id,
+                instruction_id,
+                version,
+                _audit_event(
+                    event_type="claim_validated",
+                    actor=reviewer_name,
+                    reviewer_role=reviewer_role,
+                    comment=comment,
+                    metadata={
+                        "claim_id": claim_id,
+                        "validation_id": validation_id,
+                        "source_id": claim.source_id,
+                        "evidence_sha256": evidence_sha256,
+                        **_actor_metadata(reviewer_user_id, reviewer_role),
+                    },
+                ),
+            )
+            connection.commit()
+            return claim
         except Exception:
             connection.rollback()
             raise
