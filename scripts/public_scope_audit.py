@@ -32,11 +32,16 @@ REQUIRED_GITIGNORE_ENTRIES = (
     "docs/ssrn_status_and_outreach_2026-07-29.md",
     "docs/ARTICLE_CHAT.md",
     "docs/article_review_and_roadmap.md",
-    "docs/research/audit/",
-    "docs/research/procedra_author_positioning_note.md",
-    "docs/research/procedra_evidence_audit.md",
-    "docs/research/v2_draft_worked_example.md",
-    "docs/research/v2_evaluation_protocol.md",
+    "docs/research/*",
+)
+RESEARCH_ROOT = "docs/research/"
+RESEARCH_PUBLIC_ALLOWLIST = (
+    "docs/research/README.md",
+    "docs/research/procedra_ssrn_final_upload_checklist_for_alexander.md",
+    "docs/research/procedra_ssrn_submission_package.md",
+    "docs/research/procedra_ssrn_working_paper.md",
+    "docs/research/procedra_ssrn_working_paper.pdf",
+    "docs/research/procedra_ssrn_working_paper_pdf_ready.md",
 )
 PRIVATE_PATH_PREFIXES = (
     ".env",
@@ -56,17 +61,6 @@ PRIVATE_PATH_PREFIXES = (
     "docs/ssrn_status_and_outreach_2026-07-29.md",
     "docs/ARTICLE_CHAT.md",
     "docs/article_review_and_roadmap.md",
-    "docs/research/audit/",
-    "docs/research/procedra_author_positioning_note.md",
-    "docs/research/procedra_evidence_audit.md",
-    "docs/research/procedra_external_benchmark_audit.md",
-    "docs/research/procedra_final_pre_submission_quality_audit.md",
-    "docs/research/procedra_materials_inventory.md",
-    "docs/research/procedra_paper_strategy.md",
-    "docs/research/procedra_ssrn_readiness_audit.md",
-    "docs/research/ssrn_requirements_check.md",
-    "docs/research/v2_draft_worked_example.md",
-    "docs/research/v2_evaluation_protocol.md",
 )
 IGNORED_ARTIFACT_ROOTS = (
     PROJECT_ROOT / "generated",
@@ -221,6 +215,10 @@ def _is_private_path(path: str) -> bool:
         return False
     if path == ".DS_Store" or path.endswith("/.DS_Store"):
         return True
+    if path.startswith(RESEARCH_ROOT):
+        # Research notes are private unless explicitly published, so a new file
+        # added to that directory fails closed instead of leaking silently.
+        return path not in RESEARCH_PUBLIC_ALLOWLIST
     return any(path == prefix.rstrip("/") or path.startswith(prefix) for prefix in PRIVATE_PATH_PREFIXES)
 
 
