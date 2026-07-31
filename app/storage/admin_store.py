@@ -15,7 +15,7 @@ from app.core.settings import get_settings
 from app.schemas.admin import AdminAuditEvent, InvitationPublic, ProjectPublic
 from app.schemas.auth import UserPublic, UserRole
 from app.storage.auth_store import insert_user_record
-from app.storage.database import apply_migrations, connect_database
+from app.storage.database import admin_audit_event_hash, apply_migrations, connect_database
 
 
 class AdminResourceNotFound(ValueError):
@@ -36,22 +36,50 @@ def append_admin_audit_event(
     target_id: str,
     details: dict[str, object],
 ) -> None:
+    event_id = secrets.token_hex(16)
+    details_json = json.dumps(details, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    created_at = datetime.now(UTC).isoformat()
+    previous_row = connection.execute(
+        """
+        SELECT sequence, event_hash FROM admin_audit_events
+        WHERE organization_id = ? ORDER BY sequence DESC LIMIT 1
+        """,
+        (organization_id,),
+    ).fetchone()
+    sequence = int(previous_row["sequence"]) + 1 if previous_row is not None else 1
+    previous_event_hash = str(previous_row["event_hash"]) if previous_row is not None else ""
+    event_hash = admin_audit_event_hash(
+        organization_id,
+        sequence,
+        previous_event_hash,
+        event_id,
+        actor_user_id,
+        action,
+        target_type,
+        target_id,
+        details_json,
+        created_at,
+    )
     connection.execute(
         """
         INSERT INTO admin_audit_events (
             event_id, organization_id, actor_user_id, action,
-            target_type, target_id, details_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            target_type, target_id, details_json, created_at,
+            sequence, previous_event_hash, event_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            secrets.token_hex(16),
+            event_id,
             organization_id,
             actor_user_id,
             action,
             target_type,
             target_id,
-            json.dumps(details, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-            datetime.now(UTC).isoformat(),
+            details_json,
+            created_at,
+            sequence,
+            previous_event_hash,
+            event_hash,
         ),
     )
 

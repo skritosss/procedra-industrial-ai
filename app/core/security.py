@@ -9,7 +9,12 @@ from app.core.settings import get_settings
 
 
 def api_auth_required(path: str) -> bool:
-    if path in {"/api/auth/register", "/api/auth/login", "/api/auth/invitations/accept"}:
+    if path in {
+        "/api/auth/config",
+        "/api/auth/register",
+        "/api/auth/login",
+        "/api/auth/invitations/accept",
+    }:
         return False
     return path.startswith("/api/") or path.startswith("/generated/keyframes/")
 

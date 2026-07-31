@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import os
+import sqlite3
 import sys
 
 import pytest
@@ -51,10 +52,97 @@ def test_cleanup_artifacts_delete_removes_old_files_and_empty_dirs(tmp_path, mon
     assert fresh_file.exists()
 
 
+def test_cleanup_reconciles_video_ownership_only_after_artifacts_are_gone(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(cleanup, "PROJECT_ROOT", tmp_path)
+    database_path = tmp_path / "generated" / "app.sqlite3"
+    database_path.parent.mkdir(parents=True)
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE resource_ownership (
+                organization_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT NOT NULL
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO resource_ownership VALUES (?, 'video', ?)",
+            [("legacy", "missing-video"), ("tenant-a", "present-video")],
+        )
+    present = tmp_path / "generated" / "keyframes" / "tenant-a" / "present-video" / "frame.jpg"
+    _touch(present, datetime.now(UTC))
+
+    planned = cleanup.cleanup_artifacts(
+        roots=(tmp_path / "generated" / "keyframes",),
+        reconcile_video_ownership=True,
+        database_path=database_path,
+    )
+    assert planned.orphaned_video_ownership_rows == 1
+    assert planned.removed_video_ownership_rows == 0
+
+    applied = cleanup.cleanup_artifacts(
+        roots=(tmp_path / "generated" / "keyframes",),
+        delete=True,
+        reconcile_video_ownership=True,
+        database_path=database_path,
+    )
+    assert applied.orphaned_video_ownership_rows == 1
+    assert applied.removed_video_ownership_rows == 1
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute("SELECT organization_id, resource_id FROM resource_ownership").fetchall()
+    assert rows == [("tenant-a", "present-video")]
+
+
 def test_cleanup_default_roots_do_not_target_saved_instructions_or_documents() -> None:
     default_roots = {root.relative_to(cleanup.PROJECT_ROOT).as_posix() for root in cleanup.DEFAULT_ROOTS}
 
     assert default_roots == {"generated/keyframes", "uploads/videos"}
+
+
+def test_cleanup_preserves_active_job_artifact_and_removes_old_terminal_job(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(cleanup, "PROJECT_ROOT", tmp_path)
+    now = datetime(2026, 7, 16, tzinfo=UTC)
+    database_path = tmp_path / "generated" / "app.sqlite3"
+    database_path.parent.mkdir(parents=True)
+    active_artifact = tmp_path / "uploads" / "videos" / "active.mp4"
+    terminal_artifact = tmp_path / "uploads" / "videos" / "terminal.mp4"
+    _touch(active_artifact, now - timedelta(days=3))
+    _touch(terminal_artifact, now - timedelta(days=3))
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE video_jobs (
+                job_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                artifact_path TEXT,
+                completed_at TEXT
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO video_jobs VALUES (?, ?, ?, ?)",
+            [
+                ("active", "running", str(active_artifact), None),
+                ("terminal", "succeeded", str(terminal_artifact), (now - timedelta(days=2)).isoformat()),
+            ],
+        )
+
+    result = cleanup.cleanup_artifacts(
+        roots=(tmp_path / "uploads" / "videos",),
+        max_age_hours=24,
+        delete=True,
+        database_path=database_path,
+        now=now,
+    )
+
+    assert active_artifact.exists()
+    assert not terminal_artifact.exists()
+    assert result.matched_files == 1
+    assert result.terminal_video_job_rows == 1
+    assert result.removed_terminal_video_job_rows == 1
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT job_id FROM video_jobs").fetchall() == [("active",)]
 
 
 def test_cleanup_artifacts_preserves_protected_files(tmp_path, monkeypatch) -> None:

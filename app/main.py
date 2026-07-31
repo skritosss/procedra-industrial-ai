@@ -42,7 +42,7 @@ from app.core.observability import (
 from app.core.request_logging import emit_request_log, result_category, route_template
 from app.core.rate_limit import check_rate_limit
 from app.core.security import api_auth_required, request_is_authorized
-from app.core.settings import get_settings
+from app.core.settings import Settings, get_settings
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -270,8 +270,25 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready(response: Response) -> dict[str, object]:
-    from app.storage.auth_store import database_is_ready
-    from app.storage.metrics_store import metrics_store_is_ready
+    details = _readiness_details()
+    if details["status"] == "degraded":
+        response.status_code = 503
+    return {"status": details["status"]}
+
+
+@app.get("/ready/details")
+def ready_details(request: Request, response: Response) -> dict[str, object]:
+    if not _has_observability_access(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    details = _readiness_details()
+    if details["status"] == "degraded":
+        response.status_code = 503
+    return details
+
+
+def _readiness_details() -> dict[str, object]:
+    from app.storage.auth_store import database_is_read_only
+    from app.storage.metrics_store import metrics_store_is_read_only_ready
 
     settings = get_settings()
     generated_writable = _is_writable_directory(GENERATED_DIR)
@@ -280,8 +297,8 @@ def ready(response: Response) -> dict[str, object]:
     uploads_writable = _is_writable_directory(UPLOADS_DIR)
     documents_writable = _is_writable_directory(DOCUMENTS_DIR)
     database_parent_writable = _is_writable_directory(settings.database_path.parent)
-    database_ready = database_parent_writable and database_is_ready(settings.database_path)
-    metrics_database_ready = metrics_store_is_ready(settings.metrics_database_path)
+    database_ready = database_parent_writable and database_is_read_only(settings.database_path)
+    metrics_database_ready = metrics_store_is_read_only_ready(settings.metrics_database_path)
     readiness_status = (
         "ready"
         if generated_writable
@@ -293,8 +310,6 @@ def ready(response: Response) -> dict[str, object]:
         and metrics_database_ready
         else "degraded"
     )
-    if readiness_status == "degraded":
-        response.status_code = 503
     return {
         "status": readiness_status,
         "deployment_mode": settings.deployment_mode,
@@ -306,11 +321,15 @@ def ready(response: Response) -> dict[str, object]:
         "public_registration_enabled": settings.auth_public_registration_enabled,
         "role_self_assignment_enabled": settings.auth_allow_role_self_assignment,
         "auth_session_ttl_seconds": settings.auth_session_ttl_seconds,
+        "auth_session_idle_timeout_seconds": settings.auth_session_idle_timeout_seconds,
+        "auth_session_retention_seconds": settings.auth_session_retention_seconds,
         "rate_limit_enabled": settings.rate_limit_enabled,
         "rate_limit_requests": settings.rate_limit_requests,
         "auth_rate_limit_requests": settings.auth_rate_limit_requests,
+        "metrics_public_enabled": settings.metrics_public_enabled,
         "trust_proxy_headers": settings.trust_proxy_headers,
         "video_allowed_hosts": list(settings.video_allowed_hosts),
+        "capabilities": _capability_details(settings),
         "generated_dir_writable": generated_writable,
         "keyframes_dir_writable": keyframes_writable,
         "instructions_dir_writable": instructions_writable,
@@ -322,15 +341,49 @@ def ready(response: Response) -> dict[str, object]:
     }
 
 
+def _capability_details(settings: Settings) -> dict[str, dict[str, object]]:
+    openai_configured = bool(settings.openai_enabled and settings.openai_api_key)
+    model_status = "configured_not_probed" if openai_configured else (
+        "fallback_only" if not settings.openai_enabled else "misconfigured_fallback"
+    )
+    return {
+        "model_generation": {
+            "mode": model_status,
+            "external_health": "not_probed",
+        },
+        "vision_analysis": {
+            "mode": model_status,
+            "external_health": "not_probed",
+        },
+        "public_source_catalog": {
+            "enabled": settings.public_sources_enabled,
+            "mode": "local_catalog" if settings.public_sources_enabled else "disabled",
+        },
+        "video_url_ingest": {
+            "enabled": settings.deployment_mode == "demo" or bool(settings.video_allowed_hosts),
+            "host_allowlist_configured": bool(settings.video_allowed_hosts),
+        },
+    }
+
+
 @app.get("/metrics")
 def metrics(request: Request, response: Response) -> dict:
-    if not request_is_authorized(request):
+    if not _has_observability_access(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     snapshot = durable_metrics_snapshot(get_settings())
     if snapshot is None:
         response.status_code = 503
         return unavailable_metrics_snapshot()
     return snapshot
+
+
+def _has_observability_access(request: Request) -> bool:
+    settings = get_settings()
+    if settings.metrics_public_enabled and settings.deployment_mode == "demo":
+        return True
+    if not request_is_authorized(request):
+        return False
+    return bool(settings.api_access_token or getattr(request.state, "current_user", None))
 
 
 ROUTE_TEMPLATES = tuple(app.openapi()["paths"]) + (

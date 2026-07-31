@@ -27,7 +27,15 @@ URL processing is split into two separate stages:
 - text stage: title, description, subtitles, and transcript are read without downloading the visual stream;
 - visual stage: a separate video-only stream is downloaded at the selected keyframe quality: `240p`, `360p`, `720p`, or `1080p`.
 
-This keeps speech/subtitle extraction fast while allowing higher-quality frames for future vision analysis.
+Multipart uploads are streamed to a tenant-scoped temporary file in bounded
+chunks and atomically renamed only after the configured size limit and non-empty
+checks pass. The primary UI path then persists a schema-v10 job and returns
+`202 Accepted`; yt-dlp, OpenCV, and model work runs in a separate worker process.
+The older synchronous routes remain available for API compatibility, but the UI
+does not depend on a long-lived HTTP request.
+
+This keeps speech/subtitle extraction fast while allowing the implemented vision
+stage to analyze frames at the selected quality.
 
 When `OPENAI_ENABLED=true` and an API key is configured, selected keyframes are analyzed by `OPENAI_VISION_MODEL`. When vision is disabled or unavailable, the API returns conservative fallback frame-analysis records instead of inventing visual details.
 
@@ -45,7 +53,65 @@ The keyframe selector samples more candidate frames than requested and scores th
 
 Each returned keyframe includes `selection_score` and `selection_reason`, so the UI and JSON response explain why the frame was chosen.
 
-## Endpoint
+## Durable job endpoints
+
+```text
+POST /api/videos/jobs
+GET /api/videos/jobs/{job_id}
+GET /api/videos/jobs/{job_id}/result
+DELETE /api/videos/jobs/{job_id}
+```
+
+`POST` accepts the same upload/URL form fields described below and an optional
+`Idempotency-Key` header. It returns `202` with a tenant/project-scoped job id,
+status, coarse progress, attempt budget, and cancellation state. The status
+response never returns the original URL, staged file path, lease owner, or raw
+internal error. The result endpoint returns `409` until the job succeeds.
+
+The worker atomically claims one queued job, renews a lease with a heartbeat,
+recovers expired leases, retries bounded transient download failures, and checks
+for cancellation throughout acquisition, extraction, analysis, and finalization.
+Download, OpenCV extraction, and frame analysis each run in an isolated child
+process with a configured hard deadline. The parent worker keeps the lease
+heartbeat active and polls for cancellation or lease loss; any of those events
+terminates the child's process group before the job state is changed. A timed-out
+stage uses the public `processing_timeout` error and the existing bounded retry
+budget. Partial staged/downloaded artifacts are removed when the job reaches a
+terminal failure or cancellation state, and a completed result is never
+published after cancellation.
+
+The current Compose topology intentionally runs one worker, so video concurrency
+is one per worker service. This is a single-host SQLite contract, not a
+distributed multi-host queue. The older synchronous compatibility endpoints do
+not use this subprocess contract and remain request-bound.
+
+Run locally in a second terminal:
+
+```bash
+make video-worker
+```
+
+Docker Compose starts `video-job-worker` alongside the API and mounts the same
+generated/upload volumes.
+
+The 2026-07-16 daemon-backed drill killed the worker during
+`extracting_keyframes`, observed the persisted lease remain on attempt 1, and
+then observed a replacement worker reclaim only after lease expiry and complete
+on attempt 2. The validated result contained 16 keyframes, 16 frame analyses,
+and 6 semantic segments; API restart and force-recreate preserved the job and
+artifacts in named volumes. Frame-derived context is capped at the response
+schema's 12,000-character limit before persistence. This is single-host
+recovery evidence only, not distributed queue or HA evidence.
+
+A second isolated daemon drill on the same date verified the new hard stage
+boundary. With a one-second extraction budget, a 90-second/50 MiB synthetic job
+failed with `processing_timeout` about 1.1 seconds after extraction began and
+left no staged artifact or child process. A separate running extraction was
+cancelled in 0.18 seconds, its child process and artifact disappeared, and the
+worker remained running. The normal isolated path then processed the same input
+successfully in about 5.8 seconds with 8 keyframes, 8 analyses, and 6 segments.
+
+## Compatibility endpoints
 
 ```text
 POST /api/videos/keyframes
@@ -111,7 +177,16 @@ This is the maximum number of representative keyframes the system extracts from 
 - URL videos can generate a draft instruction from title, description, subtitles/transcript, semantic video stages, frame-analysis records, and keyframe timestamps.
 - Local uploaded videos can generate a draft instruction from filename, semantic video stages, keyframe timestamps, and frame-analysis records.
 - Real production use still requires expert review and approved documentation.
+- Worker crash recovery, API/container persistence, hard stage timeout,
+  cancellation, and the normal isolated path have daemon-backed single-host
+  Compose evidence.
+- The timeout/cancellation contract covers the primary queued job path only;
+  synchronous compatibility routes remain request-bound.
+- The SQLite contention probe is synthetic storage-level evidence, not a media
+  throughput ceiling, multi-host test, or production load validation.
 
 ## Next Step
 
-The next CV step is stronger scene detection for long videos, including transcript-aware stage boundaries and better action-to-step alignment.
+The next CV-specific improvement is stronger scene detection for long videos
+and transcript-aware stage boundaries. Production hardening should first add
+container/OS scanning, hash-locked transitive dependencies, and release SBOMs.

@@ -8,6 +8,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     VIDEO_MAX_BYTES=262144000 \
     VIDEO_MAX_DURATION_SECONDS=1800 \
     VIDEO_NETWORK_TIMEOUT_SECONDS=15 \
+    VIDEO_JOB_LEASE_SECONDS=600 \
+    VIDEO_JOB_HEARTBEAT_SECONDS=15 \
+    VIDEO_JOB_POLL_SECONDS=1 \
+    VIDEO_JOB_MAX_ATTEMPTS=3 \
+    VIDEO_JOB_DOWNLOAD_TIMEOUT_SECONDS=900 \
+    VIDEO_JOB_EXTRACT_TIMEOUT_SECONDS=900 \
+    VIDEO_JOB_ANALYSIS_TIMEOUT_SECONDS=900 \
+    VIDEO_JOB_STAGE_POLL_SECONDS=0.25 \
     VISION_MAX_KEYFRAMES=8 \
     VISION_MAX_IMAGE_BYTES=5242880 \
     DOCUMENT_MAX_BYTES=15728640 \
@@ -41,8 +49,10 @@ RUN pip install --upgrade pip \
 COPY app ./app
 COPY docs ./docs
 COPY examples ./examples
+COPY scripts/cleanup_artifacts.py ./scripts/cleanup_artifacts.py
 COPY scripts/manage_database.py ./scripts/manage_database.py
 COPY scripts/reconcile_document_ownership.py ./scripts/reconcile_document_ownership.py
+COPY scripts/run_video_job_worker.py ./scripts/run_video_job_worker.py
 COPY README.md ./
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \

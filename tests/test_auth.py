@@ -1,6 +1,7 @@
 import hashlib
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +16,7 @@ from app.storage.auth_store import (
     authenticate_user,
     create_bootstrap_user,
     create_session,
+    cleanup_expired_sessions,
     create_browser_session,
     create_user,
     database_is_ready,
@@ -227,6 +229,36 @@ def test_auth_store_rejects_expired_and_revoked_sessions(tmp_path) -> None:
     assert get_user_by_token(active_token, database_path=database_path) is None
 
 
+def test_auth_store_rejects_idle_sessions_and_cleans_old_rows(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "idle-sessions.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "auth_session_idle_timeout_seconds": 300,
+            "auth_session_retention_seconds": 3_600,
+        }
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    user = create_user("idle@example.com", "Idle User", "strong-password-1", database_path=database_path)
+    idle_token = create_session(user.user_id, database_path=database_path)
+    old_token = create_session(user.user_id, database_path=database_path)
+    old_timestamp = datetime(2020, 1, 1, tzinfo=UTC).isoformat()
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?",
+            (old_timestamp, hashlib.sha256(idle_token.encode()).hexdigest()),
+        )
+        connection.execute(
+            "UPDATE auth_sessions SET expires_at = ?, last_seen_at = ? WHERE token_hash = ?",
+            (old_timestamp, old_timestamp, hashlib.sha256(old_token.encode()).hexdigest()),
+        )
+
+    assert get_user_by_token(idle_token, database_path=database_path) is None
+    assert cleanup_expired_sessions(database_path=database_path) == 1
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM auth_sessions").fetchone()[0] == 1
+
+
 def test_auth_store_revokes_all_user_sessions(tmp_path) -> None:
     database_path = tmp_path / "auth.sqlite3"
     user = create_user("all@example.com", "All Sessions", "strong-password-1", database_path=database_path)
@@ -333,6 +365,29 @@ def test_auth_api_register_login_me_and_session_bearer_access(tmp_path, monkeypa
     assert generated.status_code == 200
 
 
+def test_auth_config_hides_unsupported_production_registration_controls(monkeypatch) -> None:
+    settings = get_settings().model_copy(
+        update={
+            "api_access_token": "production-capability-token-at-least-32-characters",
+            "auth_public_registration_enabled": False,
+            "auth_allow_role_self_assignment": False,
+            "auth_min_password_length": 12,
+        }
+    )
+    monkeypatch.setattr("app.api.auth.get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+
+    response = TestClient(app).get("/api/auth/config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "public_registration_enabled": False,
+        "role_self_assignment_enabled": False,
+        "allowed_registration_roles": ["operator"],
+        "minimum_password_length": 12,
+    }
+
+
 def test_browser_cookie_login_hides_token_and_sets_hardened_production_cookies(tmp_path, monkeypatch) -> None:
     database_path = tmp_path / "browser-login.sqlite3"
     settings = get_settings().model_copy(
@@ -352,8 +407,10 @@ def test_browser_cookie_login_hides_token_and_sets_hardened_production_cookies(t
         database_path=database_path,
     )
     monkeypatch.setattr("app.api.auth.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.instructions.get_settings", lambda: settings)
     monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
     monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
     client = TestClient(app, base_url="https://testserver")
 
     login = client.post(
@@ -375,6 +432,13 @@ def test_browser_cookie_login_hides_token_and_sets_hardened_production_cookies(t
     assert "Secure" in csrf_cookie
     assert "SameSite=strict" in csrf_cookie
     assert client.get("/api/auth/me").status_code == 200
+    csrf_token = client.cookies.get(CSRF_COOKIE_NAME)
+    generated = client.post(
+        "/api/instructions/generate",
+        headers={CSRF_HEADER_NAME: csrf_token},
+        json={"task": "Проверить рабочее место перед запуском оборудования"},
+    )
+    assert generated.status_code == 200
 
 
 def test_cookie_authenticated_changes_require_server_validated_csrf(tmp_path, monkeypatch) -> None:

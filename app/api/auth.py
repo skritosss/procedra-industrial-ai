@@ -23,6 +23,23 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+@router.get("/config")
+def auth_config() -> dict[str, object]:
+    """Expose only the controls the unauthenticated login UI may offer."""
+    settings = get_settings()
+    allowed_roles = (
+        ["operator", "master", "technologist", "safety", "quality", "admin"]
+        if settings.auth_allow_role_self_assignment
+        else ["operator"]
+    )
+    return {
+        "public_registration_enabled": settings.auth_public_registration_enabled,
+        "role_self_assignment_enabled": settings.auth_allow_role_self_assignment,
+        "allowed_registration_roles": allowed_roles,
+        "minimum_password_length": settings.auth_min_password_length,
+    }
+
+
 @router.post("/register", response_model=AuthResponse, response_model_exclude_none=True)
 def register_user(http_request: Request, http_response: Response, request: RegisterUserRequest) -> AuthResponse:
     from app.storage.auth_store import create_bootstrap_user, create_user

@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     video_max_bytes: int = Field(default=250 * 1024 * 1024, ge=1 * 1024 * 1024, le=2 * 1024 * 1024 * 1024)
     video_max_duration_seconds: float = Field(default=1800.0, ge=10, le=7200)
     video_network_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    video_job_lease_seconds: int = Field(default=600, ge=30, le=7200)
+    video_job_heartbeat_seconds: int = Field(default=15, ge=1, le=300)
+    video_job_poll_seconds: float = Field(default=1.0, ge=0.1, le=30)
+    video_job_max_attempts: int = Field(default=3, ge=1, le=10)
+    video_job_download_timeout_seconds: float = Field(default=900.0, ge=1, le=7200)
+    video_job_extract_timeout_seconds: float = Field(default=900.0, ge=1, le=7200)
+    video_job_analysis_timeout_seconds: float = Field(default=900.0, ge=1, le=7200)
+    video_job_stage_poll_seconds: float = Field(default=0.25, ge=0.05, le=5)
     vision_max_keyframes: int = Field(default=8, ge=1, le=32)
     vision_max_image_bytes: int = Field(default=5 * 1024 * 1024, ge=100 * 1024, le=20 * 1024 * 1024)
     public_sources_enabled: bool = True
@@ -37,11 +45,14 @@ class Settings(BaseSettings):
     metrics_availability_slo_percent: float = Field(default=99.0, ge=50.0, le=100.0)
     metrics_latency_slo_percent: float = Field(default=95.0, ge=50.0, le=100.0)
     metrics_alert_min_requests: int = Field(default=20, ge=1, le=1_000_000)
+    metrics_public_enabled: bool = False
     api_access_token: str | None = None
     auth_public_registration_enabled: bool = True
     auth_allow_role_self_assignment: bool = True
     auth_min_password_length: int = Field(default=8, ge=8, le=128)
     auth_session_ttl_seconds: int = Field(default=86_400, ge=300, le=31_536_000)
+    auth_session_idle_timeout_seconds: int = Field(default=3_600, ge=300, le=31_536_000)
+    auth_session_retention_seconds: int = Field(default=604_800, ge=3_600, le=31_536_000)
     auth_invitation_ttl_seconds: int = Field(default=259_200, ge=300, le=2_592_000)
     auth_max_active_sessions: int = Field(default=10, ge=1, le=100)
     rate_limit_enabled: bool = True
@@ -123,6 +134,10 @@ class Settings(BaseSettings):
             raise ValueError("METRICS_RETENTION_SECONDS must be at least METRICS_WINDOW_SECONDS")
         if self.metrics_window_seconds < self.metrics_bucket_seconds:
             raise ValueError("METRICS_WINDOW_SECONDS must be at least METRICS_BUCKET_SECONDS")
+        if self.auth_session_idle_timeout_seconds > self.auth_session_ttl_seconds:
+            raise ValueError("AUTH_SESSION_IDLE_TIMEOUT_SECONDS must not exceed AUTH_SESSION_TTL_SECONDS")
+        if self.video_job_heartbeat_seconds * 2 >= self.video_job_lease_seconds:
+            raise ValueError("VIDEO_JOB_HEARTBEAT_SECONDS must be less than half VIDEO_JOB_LEASE_SECONDS")
         if self.deployment_mode != "production":
             return self
         unsafe_options = []
@@ -136,6 +151,8 @@ class Settings(BaseSettings):
             unsafe_options.append("RATE_LIMIT_ENABLED must be true")
         if self.auth_min_password_length < 12:
             unsafe_options.append("AUTH_MIN_PASSWORD_LENGTH must be at least 12")
+        if self.metrics_public_enabled:
+            unsafe_options.append("METRICS_PUBLIC_ENABLED must be false")
         if self.trust_proxy_headers and not self.trusted_proxy_ips:
             unsafe_options.append("TRUSTED_PROXY_IPS must be configured when proxy headers are trusted")
         if not self.video_allowed_hosts:

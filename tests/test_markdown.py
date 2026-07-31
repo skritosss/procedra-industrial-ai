@@ -42,7 +42,8 @@ def test_render_instruction_markdown_contains_core_sections() -> None:
     assert "## Блокеры перед утверждением" in markdown
     assert "## Следующие действия по внедрению" in markdown
     assert "## Критерии приемки результата" in markdown
-    assert "## Подтвержденные входные данные" in markdown
+    assert "## Утверждения из входных данных" in markdown
+    assert "## Происхождение и статус утверждений" in markdown
     assert "## Что требуется проверить локально" in markdown
     assert "## Вопросы для экспертной проверки" in markdown
     assert "## Ограничения и проверка перед внедрением" in markdown

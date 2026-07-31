@@ -96,11 +96,14 @@ Create a web service that generates a structured work instruction from a text de
 - Uploaded enterprise-document retrieval.
 - Instruction version-history storage, role-gated workflow status updates, execution-run records, and execution summary metrics.
 - Video keyframe extraction.
+- Optional vision-model analysis of selected frames with conservative fallback
+  records when the external model is disabled or unavailable.
 - URL video metadata/subtitle extraction.
 - Draft instruction generation from video-derived context.
 - Review workflow block for expert approval before implementation.
 
 ## Deferred Scope
 
-- Vision-model descriptions of selected frames.
+- External production validation of vision-model accuracy on representative
+  industrial footage.
 - Enterprise integrations.

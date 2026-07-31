@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -44,6 +45,70 @@ EvaluationCriterion = Literal[
 ]
 InstructionLifecycleStatus = Literal["ai_draft", "expert_review", "approved", "rejected"]
 RiskLevel = Literal["low", "medium", "high", "critical"]
+EvidenceProvenance = Literal[
+    "user_claim",
+    "retrieved_unverified",
+    "validated_local",
+    "model_inference",
+]
+EvidenceValidationStatus = Literal["unverified", "validated"]
+SafetyFindingCode = Literal[
+    "hazardous_action",
+    "contradictory_context",
+    "unsupported_numeric_claim",
+    "instruction_override",
+]
+EvidenceSourceType = Literal["user_input", "retrieved_source", "model_output"]
+EvidenceValidatorRole = Literal["technologist", "safety", "quality", "admin"]
+
+
+class ClaimValidationRecord(BaseModel):
+    validation_id: str = Field(..., min_length=16, max_length=64)
+    claim_id: str = Field(..., min_length=16, max_length=64)
+    evidence_reference: str = Field(..., min_length=3, max_length=500)
+    evidence_sha256: str = Field(..., pattern=r"^[a-f0-9]{64}$")
+    reviewer_user_id: str = Field(..., min_length=1, max_length=64)
+    reviewer_name: str = Field(..., min_length=2, max_length=120)
+    reviewer_role: EvidenceValidatorRole
+    comment: str = Field(..., min_length=5, max_length=1000)
+    validated_at: datetime
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class EvidenceClaim(BaseModel):
+    claim_id: str | None = Field(default=None, min_length=16, max_length=64)
+    text: str = Field(..., min_length=1, max_length=500)
+    provenance: EvidenceProvenance
+    source_id: str | None = Field(default=None, min_length=1, max_length=128)
+    source_type: EvidenceSourceType | None = None
+    validation_status: EvidenceValidationStatus = "unverified"
+    requires_local_verification: bool = True
+    validation_record: ClaimValidationRecord | None = None
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_local_evidence_contract(self):
+        validated = self.validation_status == "validated"
+        if validated != (self.provenance == "validated_local"):
+            raise ValueError("validated claims must use validated_local provenance")
+        if validated != (self.validation_record is not None):
+            raise ValueError("validated claims require a validation record")
+        if self.validation_record is not None and self.validation_record.claim_id != self.claim_id:
+            raise ValueError("validation record must reference the same claim_id")
+        if validated and self.requires_local_verification:
+            raise ValueError("validated claims cannot require local verification")
+        return self
+
+
+class SafetyFinding(BaseModel):
+    code: SafetyFindingCode
+    severity: Literal["high", "critical"]
+    message: str = Field(..., min_length=1, max_length=500)
+    evidence_excerpt: str = Field(..., min_length=1, max_length=300)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
 
 
 class InstructionWorkflow(BaseModel):
@@ -144,6 +209,7 @@ class WorkInstruction(BaseModel):
     emergency_actions: list[str] = Field(..., min_length=1)
     common_mistakes: list[str] = Field(..., min_length=1)
     observed_facts: list[str] = Field(default_factory=list)
+    evidence_claims: list[EvidenceClaim] = Field(default_factory=list, max_length=20)
     local_verification_required: list[str] = Field(default_factory=list)
     expert_review_questions: list[str] = Field(default_factory=list)
     workflow: InstructionWorkflow = Field(default_factory=InstructionWorkflow)
@@ -203,6 +269,7 @@ class InstructionEvaluation(BaseModel):
     risk_level: RiskLevel = "medium"
     expert_review_required: bool = True
     expert_review_notes: list[str] = Field(default_factory=list)
+    safety_findings: list[SafetyFinding] = Field(default_factory=list)
 
 
 class EvaluationRequest(BaseModel):

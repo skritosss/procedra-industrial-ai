@@ -17,8 +17,17 @@ from app.storage.database import (  # noqa: E402
 )
 
 
-def main() -> None:
-    args = _parse_args()
+def main() -> int:
+    try:
+        result = _run_command(_parse_args())
+    except (OSError, ValueError) as exc:
+        print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_command(args: argparse.Namespace) -> dict[str, object]:
     database_path = args.database or get_settings().database_path
     if args.command == "migrate":
         with connect_database(database_path) as connection:
@@ -46,7 +55,7 @@ def main() -> None:
             "safety_backup": str(safety_backup) if safety_backup else None,
             **verify_database(database_path),
         }
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
 
 
 def _parse_args() -> argparse.Namespace:
@@ -74,4 +83,4 @@ def _default_safety_backup_path(database_path: Path) -> Path:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

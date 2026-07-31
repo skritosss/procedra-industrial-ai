@@ -33,6 +33,28 @@ def metrics_store_is_ready(database_path: Path) -> bool:
     return True
 
 
+def metrics_store_is_read_only_ready(database_path: Path) -> bool:
+    """Verify the existing metrics store without creating files or applying schema."""
+    path = database_path.resolve()
+    if not path.is_file():
+        return False
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as connection:
+            connection.row_factory = sqlite3.Row
+            check = connection.execute("PRAGMA quick_check").fetchone()
+            if not check or str(check[0]).lower() != "ok":
+                return False
+            schema = connection.execute(
+                "SELECT version FROM metrics_schema WHERE singleton = 1"
+            ).fetchone()
+            buckets = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'request_metric_buckets'"
+            ).fetchone()
+    except (OSError, sqlite3.Error, ValueError):
+        return False
+    return bool(schema and int(schema["version"]) == METRICS_SCHEMA_VERSION and buckets)
+
+
 def record_request_metric(
     database_path: Path,
     *,

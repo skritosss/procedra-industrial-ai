@@ -1,8 +1,15 @@
 # Deployment
 
-This project can run either as a local Python service or as a Dockerized FastAPI app. Docker is the recommended portfolio/demo packaging because it fixes system dependencies for OpenCV, video decoding, and `yt-dlp`.
+This project can run either as local Python processes or as a Dockerized FastAPI
+app plus video worker. Docker is the recommended portfolio/demo packaging because
+it fixes system dependencies for OpenCV, video decoding, and `yt-dlp`.
 
 ## Docker
+
+Python direct dependencies are exactly pinned in `requirements.txt`. CI resolves
+that set on Python 3.12, runs `pip check`, and fails on known Python package
+vulnerabilities via pinned `pip-audit==2.10.1` before building the image. Refresh
+pins and review audit output intentionally; do not silently widen version ranges.
 
 Build and run:
 
@@ -49,8 +56,13 @@ curl http://127.0.0.1:8000/health
 By default Docker Compose starts in deterministic demo mode with `OPENAI_ENABLED=false`. To use OpenAI-backed generation, vision, or embeddings, pass environment variables:
 
 ```bash
-OPENAI_ENABLED=true OPENAI_API_KEY=sk-... docker compose up --build
+export OPENAI_API_KEY="..."
+OPENAI_ENABLED=true docker compose up --build
 ```
+
+Compose starts both `industrial-instruction-ai` and `video-job-worker`. For a
+non-Compose local run, start `make run` and `make video-worker` in separate
+terminals; the UI's video flow remains queued until a worker is available.
 
 Compose also forwards the public-source retrieval settings:
 
@@ -63,6 +75,9 @@ Compose also forwards the public-source retrieval settings:
 - `AUTH_PUBLIC_REGISTRATION_ENABLED` and `AUTH_ALLOW_ROLE_SELF_ASSIGNMENT` must both be `false` in production.
 - `AUTH_MIN_PASSWORD_LENGTH` must be at least `12` in production, and the bootstrap `API_ACCESS_TOKEN` must contain at least 32 characters.
 - `AUTH_SESSION_TTL_SECONDS` sets the absolute SQLite-backed session lifetime.
+  `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` expires inactive sessions, while
+  `AUTH_SESSION_RETENTION_SECONDS` bounds how long expired/revoked rows remain
+  before opportunistic cleanup during authentication activity.
   Browser sessions use HttpOnly/SameSite=Strict cookies with Secure enabled in
   production and require `X-CSRF-Token` on unsafe methods; bearer API sessions
   remain supported. Logout endpoints revoke sessions server-side.
@@ -75,6 +90,14 @@ Compose also forwards the public-source retrieval settings:
 - `TRUST_PROXY_HEADERS`, default `false`, should be enabled only behind a trusted reverse proxy that controls `X-Forwarded-For`.
 - `TRUSTED_PROXY_IPS` is required when proxy headers are enabled in production; forwarded client IPs from other peers are ignored.
 - `VIDEO_ALLOWED_HOSTS` restricts every video/redirect/media/manifest/fragment/subtitle host; it may be empty only in demo mode and is mandatory in production.
+- `VIDEO_JOB_LEASE_SECONDS`, `VIDEO_JOB_HEARTBEAT_SECONDS`,
+  `VIDEO_JOB_POLL_SECONDS`, and `VIDEO_JOB_MAX_ATTEMPTS` control the single-host
+  durable worker. Heartbeat must remain less than half the lease interval.
+- `VIDEO_JOB_DOWNLOAD_TIMEOUT_SECONDS`, `VIDEO_JOB_EXTRACT_TIMEOUT_SECONDS`,
+  and `VIDEO_JOB_ANALYSIS_TIMEOUT_SECONDS` are hard deadlines for isolated
+  blocking stages. `VIDEO_JOB_STAGE_POLL_SECONDS` controls how quickly the
+  parent notices cancellation, lease loss, or timeout while maintaining the
+  heartbeat.
 
 Generated keyframes, saved instruction versions, uploaded videos, and uploaded document text artifacts are stored in Docker volumes:
 
@@ -84,10 +107,14 @@ Generated keyframes, saved instruction versions, uploaded videos, and uploaded d
 Compose also enables:
 
 - `init: true` for cleaner signal handling;
-- a service-level healthcheck against `/ready`, including database integrity and audit-chain verification;
+- an API healthcheck against the minimal `/ready` endpoint;
 - restart policy `unless-stopped` for stable local demo runs.
+- a dedicated one-job-at-a-time worker sharing the database and artifact volumes
+  with the API service. Its inherited HTTP healthcheck is explicitly disabled
+  because the worker does not serve HTTP; container state, restart count, and
+  persisted lease/heartbeat/job progress are its honest liveness signals.
 
-## Production Smoke Checklist
+## Production Smoke Checklist — local configuration gate only
 
 Run these checks before recording a demo or presenting the project:
 
@@ -99,7 +126,19 @@ python -m pip check
 python -m pytest -q
 docker compose config
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/ready
 ```
+
+Passing this list is evidence for the local code/configuration baseline only. It
+does not validate the current Docker image/runtime, production topology, load,
+recovery objectives, external integrations, security posture, or industrial
+output safety. A separate daemon-backed build/start/health/persistence/restart
+probe was completed for the single-host video-job path on 2026-07-16; its scope
+and remaining boundaries are recorded in
+`reports/procedra_video_job_daemon_runtime_completion_2026-07-16.md`. A follow-up
+drill verified hard stage timeout/cancellation, normal subprocess completion,
+and a synthetic SQLite contention probe; see
+`reports/procedra_video_job_time_budget_contention_completion_2026-07-16.md`.
 
 ## Database migrations, backup, and restore
 
@@ -145,7 +184,7 @@ docker compose exec industrial-instruction-ai python scripts/reconcile_document_
 The apply step registers all candidates in one SQLite transaction and is
 idempotent. It does not move, rewrite, quarantine, or delete files.
 
-The same checks can be run with:
+The local code/configuration checks can be run with:
 
 ```bash
 make compile
@@ -154,6 +193,7 @@ make typecheck
 make test
 make pip-check
 make docker-config
+make video-job-contention
 make smoke
 ```
 
@@ -173,9 +213,16 @@ GitHub Actions runs:
 - `compileall` over `app`, `tests`, and `scripts`;
 - Ruff linting over `app`, `tests`, and `scripts`;
 - mypy typecheck over `app`;
+- Python dependency vulnerability audit;
 - full `pytest`;
 - Docker image build;
+- container startup/readiness, non-root UID, and restart smoke;
 - Docker Compose config validation.
+
+CI starts the built API image, probes readiness, checks non-root identity, and
+restarts it. CI still does not prove shared-volume persistence, worker crash
+recovery, load behavior, or production orchestration; those require separate
+runtime drills.
 
 The CI environment sets `OPENAI_ENABLED=false`, so tests remain deterministic and do not require API credentials.
 
@@ -183,11 +230,16 @@ The CI environment sets `OPENAI_ENABLED=false`, so tests remain deterministic an
 
 - The container runs as a non-root user.
 - `ffmpeg`, `libgl1`, `libglib2.0-0`, and `libgomp1` are installed for OpenCV and video processing.
-- The Docker healthcheck calls `/ready`; `/health` remains the lightweight liveness endpoint.
+- The API Docker healthcheck calls `/ready`; `/health` remains the lightweight
+  liveness endpoint. The dedicated worker has no HTTP healthcheck.
 - The image defaults to `OPENAI_ENABLED=false` so direct `docker run` remains deterministic without secrets.
-- Runtime limits are validated at startup: upload size, document size, video network timeout, vision keyframe count, image size, and public-source count cannot be set to unsafe values.
-- For partner/prod demos, set `API_ACCESS_TOKEN` and pass `Authorization: Bearer <token>` for API calls. Local web demos can leave it empty.
+- Runtime limits are validated at startup against configured bounds: upload size,
+  document size, video network timeout, vision keyframe count, image size, and
+  public-source count. These configuration bounds are not a general safety claim.
+- `/ready/details` and `/metrics` are private by default. For partner/prod demos, set `API_ACCESS_TOKEN` and pass `Authorization: Bearer <token>` for API calls and observability endpoints. `METRICS_PUBLIC_ENABLED=true` is a demo-only local-dashboard escape hatch; production configuration rejects it. If used in demo mode, keep the service bound to `127.0.0.1`.
 - For a production-mode configuration, also set `DEPLOYMENT_MODE=production`, disable public registration and role self-assignment, configure a non-empty `VIDEO_ALLOWED_HOSTS`, and provision privileged accounts only with the bootstrap API token.
-- When using the web UI with `API_ACCESS_TOKEN`, paste the token into the API-token field before generating, uploading, exporting, or saving.
+- Browser sessions are authoritative in the web UI. The optional API-token field
+  is for bootstrap/service-token flows and does not override an active browser
+  session.
 - Maintain `VIDEO_ALLOWED_HOSTS` as an approved provider-specific list including required media CDN and caption domains; unlisted redirects and stream hosts fail closed.
 - `.env.local`, generated files, uploads, caches, and virtual environments are excluded from the image by `.dockerignore`.

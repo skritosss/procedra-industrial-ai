@@ -1,4 +1,6 @@
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from pydantic import ValidationError
@@ -11,6 +13,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def _read(path: str) -> str:
     return (PROJECT_ROOT / path).read_text(encoding="utf-8")
+
+
+def test_video_worker_cli_bootstraps_project_imports() -> None:
+    completed = subprocess.run(
+        [sys.executable, "scripts/run_video_job_worker.py", "--help"],
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "durable Procedra video-job worker" in completed.stdout
 
 
 def test_dockerfile_uses_non_root_runtime_and_healthcheck() -> None:
@@ -26,8 +41,10 @@ def test_dockerfile_uses_non_root_runtime_and_healthcheck() -> None:
     assert "fonts-dejavu-core" in dockerfile
     assert "libgomp1" in dockerfile
     assert "mkdir -p /app/generated/keyframes /app/uploads/videos" in dockerfile
+    assert "COPY scripts/cleanup_artifacts.py ./scripts/cleanup_artifacts.py" in dockerfile
     assert "COPY scripts/manage_database.py ./scripts/manage_database.py" in dockerfile
     assert "COPY scripts/reconcile_document_ownership.py ./scripts/reconcile_document_ownership.py" in dockerfile
+    assert "COPY scripts/run_video_job_worker.py ./scripts/run_video_job_worker.py" in dockerfile
     assert "USER appuser" in dockerfile
     assert "HEALTHCHECK" in dockerfile
     assert "urllib.request.urlopen('http://127.0.0.1:8000/ready'" in dockerfile
@@ -59,18 +76,26 @@ def test_env_example_is_safe_for_deterministic_local_demo() -> None:
     assert "METRICS_DATABASE_PATH=generated/metrics.sqlite3" in env_example
     assert "METRICS_AVAILABILITY_SLO_PERCENT=99" in env_example
     assert "METRICS_LATENCY_SLO_PERCENT=95" in env_example
+    assert "METRICS_PUBLIC_ENABLED=false" in env_example
+    assert "AUTH_SESSION_IDLE_TIMEOUT_SECONDS=3600" in env_example
+    assert "AUTH_SESSION_RETENTION_SECONDS=604800" in env_example
     assert "PUBLIC_SOURCES_ENABLED=true" in env_example
     assert "PUBLIC_SOURCES_MAX_RESULTS=15" in env_example
     assert "APP_PORT=8000" in env_example
     assert "APP_BIND_HOST=127.0.0.1" in env_example
 
 
-def test_requirements_include_testclient_compatibility_dependency() -> None:
+def test_requirements_include_runtime_typecheck_and_testclient_dependencies() -> None:
     requirements = _read("requirements.txt")
 
-    assert "httpx2>=2.3.0,<3.0.0" in requirements
-    assert "reportlab>=4.2.0,<5.0.0" in requirements
-    assert "mypy>=1.16.0,<2.0.0" in requirements
+    assert "httpx2==2.3.0" in requirements
+    assert "reportlab==4.5.1" in requirements
+    assert "mypy==1.20.2" in requirements
+    assert all(
+        "==" in line
+        for line in requirements.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
 
 
 def test_compose_defaults_to_deterministic_demo_mode_and_persistent_volumes() -> None:
@@ -83,6 +108,18 @@ def test_compose_defaults_to_deterministic_demo_mode_and_persistent_volumes() ->
     assert 'PUBLIC_SOURCES_MAX_RESULTS: "${PUBLIC_SOURCES_MAX_RESULTS:-15}"' in compose
     assert 'DATABASE_PATH: "${DATABASE_PATH:-/app/generated/app.sqlite3}"' in compose
     assert 'METRICS_DATABASE_PATH: "${METRICS_DATABASE_PATH:-/app/generated/metrics.sqlite3}"' in compose
+    assert 'METRICS_PUBLIC_ENABLED: "${METRICS_PUBLIC_ENABLED:-false}"' in compose
+    assert 'AUTH_SESSION_IDLE_TIMEOUT_SECONDS: "${AUTH_SESSION_IDLE_TIMEOUT_SECONDS:-3600}"' in compose
+    assert 'AUTH_SESSION_RETENTION_SECONDS: "${AUTH_SESSION_RETENTION_SECONDS:-604800}"' in compose
+    assert "video-job-worker:" in compose
+    assert 'command: ["python", "scripts/run_video_job_worker.py"]' in compose
+    assert 'VIDEO_JOB_LEASE_SECONDS: "${VIDEO_JOB_LEASE_SECONDS:-600}"' in compose
+    assert 'VIDEO_JOB_DOWNLOAD_TIMEOUT_SECONDS: "${VIDEO_JOB_DOWNLOAD_TIMEOUT_SECONDS:-900}"' in compose
+    assert 'VIDEO_JOB_EXTRACT_TIMEOUT_SECONDS: "${VIDEO_JOB_EXTRACT_TIMEOUT_SECONDS:-900}"' in compose
+    assert 'VIDEO_JOB_ANALYSIS_TIMEOUT_SECONDS: "${VIDEO_JOB_ANALYSIS_TIMEOUT_SECONDS:-900}"' in compose
+    assert 'VIDEO_JOB_STAGE_POLL_SECONDS: "${VIDEO_JOB_STAGE_POLL_SECONDS:-0.25}"' in compose
+    worker_section = compose.split("  video-job-worker:", maxsplit=1)[1]
+    assert "healthcheck:\n      disable: true" in worker_section
     assert '"${APP_BIND_HOST:-127.0.0.1}:${APP_PORT:-8000}:8000"' in compose
     assert "init: true" in compose
     assert "- generated-data:/app/generated" in compose
@@ -112,11 +149,15 @@ def test_partner_demo_doc_includes_live_demo_contract() -> None:
     partner_demo = _read("docs/partner_demo.md")
 
     assert "make smoke" in partner_demo
+    assert "make safety-eval" in partner_demo
     assert "make demo-eval" in partner_demo
     assert "source count set to 15" in partner_demo
     assert "PDF export" in partner_demo
     assert "Honest Boundaries" in partner_demo
-    assert "not invented by the system" in partner_demo
+    assert "critical false-confidence cases are locally covered by S1" in partner_demo
+    assert "This is regression" in partner_demo
+    assert "must not be presented as proof of correctness" in partner_demo
+    assert "echoed from untrusted context" in partner_demo
 
 
 def test_ci_runs_compile_tests_docker_build_and_compose_validation() -> None:
@@ -127,9 +168,14 @@ def test_ci_runs_compile_tests_docker_build_and_compose_validation() -> None:
     assert "concurrency:" in workflow
     assert "python -m compileall -q app tests scripts" in workflow
     assert "python -m pip check" in workflow
+    assert "python -m pip_audit -r requirements.txt" in workflow
     assert "python -m mypy app scripts" in workflow
     assert "python -m pytest -q" in workflow
     assert "docker build -t industrial-instruction-ai:ci ." in workflow
+    assert "docker run -d --name procedra-ci" in workflow
+    assert 'test "$(docker exec procedra-ci id -u)" != "0"' in workflow
+    assert "docker restart procedra-ci" in workflow
+    assert "curl -fsS http://127.0.0.1:18000/ready" in workflow
     assert "docker compose config" in workflow
     assert "libgomp1" in workflow
 
@@ -154,12 +200,23 @@ def test_makefile_exposes_repeatable_project_commands() -> None:
     assert "$(APP_PYTHON) scripts/run_demo_eval.py" in makefile
     assert "CLEANUP_MAX_AGE_HOURS ?= 24" in makefile
     assert "cleanup-plan:" in makefile
-    assert "scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS)" in makefile
+    assert (
+        "scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS) "
+        "--reconcile-video-ownership" in makefile
+    )
     assert "cleanup-delete:" in makefile
-    assert "scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS) --delete" in makefile
+    assert (
+        "scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS) "
+        "--reconcile-video-ownership --delete" in makefile
+    )
     assert "scripts/reconcile_document_ownership.py --database \"$(DATABASE)\"" in makefile
     assert "scripts/reconcile_document_ownership.py --database \"$(DATABASE)\" --apply" in makefile
     assert "smoke:" in makefile
+    assert "static-smoke:" in makefile
+    assert "public-scope-audit:" in makefile
+    assert "scripts/public_scope_audit.py --sample-limit 0" in makefile
+    assert "safety-eval:" in makefile
+    assert "scripts/run_safety_eval.py" in makefile
     assert "api-smoke:" in makefile
     assert "health:" in makefile
     assert "docker-build:" in makefile
@@ -168,8 +225,9 @@ def test_makefile_exposes_repeatable_project_commands() -> None:
     assert "curl -fsS http://$(HOST):$(PORT)/health" in makefile
     assert "ready:" in makefile
     assert "curl -fsS http://$(HOST):$(PORT)/ready" in makefile
+    assert "ready-details:" in makefile
     assert "metrics:" in makefile
-    assert "curl -fsS http://$(HOST):$(PORT)/metrics" in makefile
+    assert "API_ACCESS_TOKEN is required for metrics" in makefile
     assert "TestClient(app)" in makefile
 
 
@@ -196,6 +254,13 @@ def test_settings_require_separate_metrics_storage_and_valid_retention() -> None
             _env_file=None,
             metrics_window_seconds=7_200,
             metrics_retention_seconds=3_600,
+        )
+
+    with pytest.raises(ValidationError, match="IDLE_TIMEOUT"):
+        Settings(
+            _env_file=None,
+            auth_session_ttl_seconds=600,
+            auth_session_idle_timeout_seconds=601,
         )
 
 
@@ -247,6 +312,20 @@ def test_settings_accept_hardened_production_auth_configuration() -> None:
     assert settings.auth_public_registration_enabled is False
     assert settings.auth_allow_role_self_assignment is False
     assert settings.video_allowed_hosts == ("youtu.be", "youtube.com")
+
+
+def test_settings_reject_public_metrics_in_production() -> None:
+    with pytest.raises(ValidationError, match="METRICS_PUBLIC_ENABLED must be false"):
+        Settings(
+            _env_file=None,
+            deployment_mode="production",
+            api_access_token="production-bootstrap-token-at-least-32-chars",
+            auth_public_registration_enabled=False,
+            auth_allow_role_self_assignment=False,
+            auth_min_password_length=12,
+            metrics_public_enabled=True,
+            video_allowed_hosts="youtube.com",
+        )
 
 
 def test_settings_reject_production_without_video_host_allowlist() -> None:

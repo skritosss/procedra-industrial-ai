@@ -4,6 +4,7 @@ import pytest
 
 from app.core.rate_limit import reset_rate_limit_state
 from app.core.settings import get_settings
+from app.storage.metrics_store import initialize_metrics_store
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +27,7 @@ def isolate_runtime_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("AUTH_ALLOW_ROLE_SELF_ASSIGNMENT", "true")
     get_settings.cache_clear()
     reset_rate_limit_state(database_path)
+    initialize_metrics_store(metrics_database_path)
 
     monkeypatch.setattr("app.api.documents.UPLOADED_DOCUMENTS_DIR", documents_path)
     monkeypatch.setattr("app.api.instructions.UPLOADED_KNOWLEDGE_BASE", documents_path)

@@ -20,6 +20,7 @@ from app.storage.database import (
     backup_database,
     connect_database,
     database_is_healthy,
+    database_is_read_only_ready,
     restore_database,
     verify_database,
 )
@@ -140,6 +141,9 @@ def test_versioned_migrations_create_transactional_lifecycle_schema(tmp_path) ->
         (5, "shared_rate_limit"),
         (6, "browser_session_csrf"),
         (7, "composite_tenant_foreign_keys"),
+        (8, "admin_audit_hash_chain"),
+        (9, "session_idle_tracking"),
+        (10, "durable_video_jobs"),
     ]
     assert {
         "instruction_versions",
@@ -151,7 +155,16 @@ def test_versioned_migrations_create_transactional_lifecycle_schema(tmp_path) ->
         "admin_invitations",
         "admin_audit_events",
         "rate_limit_events",
+        "video_jobs",
     } <= tables
+    with connect_database(database_path) as connection:
+        owner_fk_rows = [
+            row
+            for row in connection.execute("PRAGMA foreign_key_list(video_jobs)").fetchall()
+            if str(row["table"]) == "users"
+        ]
+    assert owner_fk_rows
+    assert {str(row["on_delete"]) for row in owner_fk_rows} == {"RESTRICT"}
 
 
 def test_composite_tenant_migration_preserves_valid_v6_rows(tmp_path) -> None:
@@ -208,17 +221,16 @@ def test_composite_tenant_migration_rejects_corrupt_v6_rows_before_rebuild(tmp_p
 
 def test_composite_tenant_migration_rolls_back_rebuilt_tables_on_failure(tmp_path, monkeypatch) -> None:
     database_path = tmp_path / "rollback-v6.sqlite3"
-    original_migration = MIGRATIONS[-1][2]
+    migration_index = next(index for index, migration in enumerate(MIGRATIONS) if migration[0] == 7)
+    original_migration = MIGRATIONS[migration_index][2]
 
     def fail_after_rebuild(connection: sqlite3.Connection, ttl_seconds: int) -> None:
         original_migration(connection, ttl_seconds)
         raise RuntimeError("injected post-rebuild failure")
 
-    monkeypatch.setattr(
-        database_module,
-        "MIGRATIONS",
-        (*MIGRATIONS[:-1], (7, "composite_tenant_foreign_keys", fail_after_rebuild)),
-    )
+    failing_migrations = list(MIGRATIONS)
+    failing_migrations[migration_index] = (7, "composite_tenant_foreign_keys", fail_after_rebuild)
+    monkeypatch.setattr(database_module, "MIGRATIONS", tuple(failing_migrations))
     with connect_database(database_path) as connection:
         _seed_valid_schema_v6(connection)
         with pytest.raises(RuntimeError, match="post-rebuild failure"):
@@ -248,6 +260,22 @@ def test_migrations_reject_newer_unsupported_schema(tmp_path) -> None:
     with connect_database(database_path) as connection:
         with pytest.raises(ValueError, match="newer than supported"):
             apply_migrations(connection)
+
+
+def test_read_only_readiness_does_not_create_or_migrate_database(tmp_path) -> None:
+    missing_path = tmp_path / "missing" / "app.sqlite3"
+
+    assert database_is_read_only_ready(missing_path) is False
+    assert not missing_path.exists()
+    assert not missing_path.parent.exists()
+
+    legacy_path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(legacy_path) as connection:
+        connection.execute("CREATE TABLE marker (value TEXT)")
+    before = legacy_path.read_bytes()
+
+    assert database_is_read_only_ready(legacy_path) is False
+    assert legacy_path.read_bytes() == before
 
 
 def test_migrations_reject_unexpected_identity(tmp_path) -> None:
@@ -506,3 +534,19 @@ def test_database_management_cli_migrate_verify_and_backup(tmp_path, monkeypatch
     backed_up = json.loads(capsys.readouterr().out)
     assert backed_up["backup"] == str(backup_path)
     assert backup_path.is_file()
+
+
+def test_database_management_cli_reports_corruption_without_traceback(tmp_path, monkeypatch, capsys) -> None:
+    database_path = tmp_path / "corrupt.sqlite3"
+    database_path.write_bytes(b"not a sqlite database")
+    monkeypatch.setattr(sys, "argv", ["manage_database.py", "verify", "--database", str(database_path)])
+
+    exit_code = manage_database.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    error = json.loads(captured.err)
+    assert error["status"] == "error"
+    assert "Unable to verify database" in error["error"]
+    assert "Traceback" not in captured.err

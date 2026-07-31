@@ -14,7 +14,12 @@ from app.core.settings import get_settings
 from app.core.organization import LEGACY_ORGANIZATION_ID
 from app.core.authorization import default_project_id
 from app.schemas.auth import UserPublic, UserRole
-from app.storage.database import apply_migrations, connect_database, database_is_healthy
+from app.storage.database import (
+    apply_migrations,
+    connect_database,
+    database_is_healthy,
+    database_is_read_only_ready,
+)
 
 
 PASSWORD_ITERATIONS = 210_000
@@ -136,14 +141,16 @@ def _insert_session(
     with _connect(database_path) as connection:
         _ensure_schema(connection)
         _begin_immediate(connection)
+        _cleanup_expired_sessions(connection, now, settings.auth_session_retention_seconds)
+        idle_cutoff = now - timedelta(seconds=settings.auth_session_idle_timeout_seconds)
         active_sessions = connection.execute(
             """
             SELECT token_hash
             FROM auth_sessions
-            WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+            WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? AND last_seen_at > ?
             ORDER BY created_at DESC
             """,
-            (user_id, now.isoformat()),
+            (user_id, now.isoformat(), idle_cutoff.isoformat()),
         ).fetchall()
         sessions_to_revoke = active_sessions[max(0, settings.auth_max_active_sessions - 1) :]
         for row in sessions_to_revoke:
@@ -154,16 +161,26 @@ def _insert_session(
         connection.execute(
             """
             INSERT INTO auth_sessions (
-                token_hash, user_id, created_at, expires_at, revoked_at, csrf_token_hash
-            ) VALUES (?, ?, ?, ?, NULL, ?)
+                token_hash, user_id, created_at, expires_at, revoked_at, csrf_token_hash, last_seen_at
+            ) VALUES (?, ?, ?, ?, NULL, ?, ?)
             """,
-            (token_hash, user_id, now.isoformat(), expires_at.isoformat(), csrf_token_hash),
+            (
+                token_hash,
+                user_id,
+                now.isoformat(),
+                expires_at.isoformat(),
+                csrf_token_hash,
+                now.isoformat(),
+            ),
         )
 
 
 def get_user_by_token(token: str, database_path: Path | None = None) -> UserPublic | None:
     if not token:
         return None
+    settings = get_settings()
+    now = datetime.now(UTC)
+    idle_cutoff = now - timedelta(seconds=settings.auth_session_idle_timeout_seconds)
     with _connect(database_path) as connection:
         _ensure_schema(connection)
         row = connection.execute(
@@ -174,10 +191,16 @@ def get_user_by_token(token: str, database_path: Path | None = None) -> UserPubl
             WHERE auth_sessions.token_hash = ?
               AND auth_sessions.revoked_at IS NULL
               AND auth_sessions.expires_at > ?
+              AND auth_sessions.last_seen_at > ?
               AND users.is_active = 1
             """,
-            (_hash_token(token), datetime.now(UTC).isoformat()),
+            (_hash_token(token), now.isoformat(), idle_cutoff.isoformat()),
         ).fetchone()
+        if row is not None:
+            connection.execute(
+                "UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?",
+                (now.isoformat(), _hash_token(token)),
+            )
     if row is None:
         return None
     return _user_from_row(row)
@@ -190,6 +213,9 @@ def session_csrf_is_valid(
 ) -> bool:
     if not session_token or not csrf_token or not 32 <= len(csrf_token) <= 128:
         return False
+    settings = get_settings()
+    now = datetime.now(UTC)
+    idle_cutoff = now - timedelta(seconds=settings.auth_session_idle_timeout_seconds)
     with _connect(database_path) as connection:
         _ensure_schema(connection)
         row = connection.execute(
@@ -199,8 +225,9 @@ def session_csrf_is_valid(
             WHERE token_hash = ?
               AND revoked_at IS NULL
               AND expires_at > ?
+              AND last_seen_at > ?
             """,
-            (_hash_token(session_token), datetime.now(UTC).isoformat()),
+            (_hash_token(session_token), now.isoformat(), idle_cutoff.isoformat()),
         ).fetchone()
     if row is None or row["csrf_token_hash"] is None:
         return False
@@ -239,6 +266,34 @@ def revoke_user_sessions(user_id: str, database_path: Path | None = None) -> int
     return result.rowcount
 
 
+def cleanup_expired_sessions(database_path: Path | None = None) -> int:
+    settings = get_settings()
+    with _connect(database_path) as connection:
+        _ensure_schema(connection)
+        _begin_immediate(connection)
+        return _cleanup_expired_sessions(
+            connection,
+            datetime.now(UTC),
+            settings.auth_session_retention_seconds,
+        )
+
+
+def _cleanup_expired_sessions(
+    connection: sqlite3.Connection,
+    now: datetime,
+    retention_seconds: int,
+) -> int:
+    cutoff = now - timedelta(seconds=retention_seconds)
+    result = connection.execute(
+        """
+        DELETE FROM auth_sessions
+        WHERE expires_at <= ? OR (revoked_at IS NOT NULL AND revoked_at <= ?)
+        """,
+        (cutoff.isoformat(), cutoff.isoformat()),
+    )
+    return result.rowcount
+
+
 def list_users(database_path: Path | None = None) -> list[UserPublic]:
     with _connect(database_path) as connection:
         _ensure_schema(connection)
@@ -248,6 +303,10 @@ def list_users(database_path: Path | None = None) -> list[UserPublic]:
 
 def database_is_ready(database_path: Path | None = None) -> bool:
     return database_is_healthy(database_path or get_settings().database_path)
+
+
+def database_is_read_only(database_path: Path | None = None) -> bool:
+    return database_is_read_only_ready(database_path or get_settings().database_path)
 
 
 def _connect(database_path: Path | None = None) -> sqlite3.Connection:

@@ -1,6 +1,6 @@
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 
 from app.core.authorization import require_permission
 from app.core.settings import get_settings
@@ -14,10 +14,13 @@ from app.schemas.history import (
     SaveInstructionExecutionResponse,
     SaveInstructionHistoryRequest,
     SaveInstructionHistoryResponse,
+    ReviewerRole,
     UpdateInstructionWorkflowRequest,
     UpdateInstructionWorkflowResponse,
-    ReviewerRole,
+    ValidateInstructionClaimRequest,
+    ValidateInstructionClaimResponse,
 )
+from app.schemas.instruction import EvidenceValidatorRole
 from app.storage.instruction_history import (
     get_instruction_audit_trail,
     get_instruction_history_detail,
@@ -27,6 +30,7 @@ from app.storage.instruction_history import (
     save_instruction_history,
     summarize_instruction_executions,
     update_instruction_workflow_status,
+    validate_instruction_claim,
 )
 
 
@@ -135,6 +139,45 @@ def update_saved_instruction_workflow(
     if record is None:
         raise HTTPException(status_code=404, detail="Instruction version not found")
     return UpdateInstructionWorkflowResponse(record=record, message="Instruction workflow updated")
+
+
+@router.post(
+    "/{instruction_id}/versions/{version}/claims/{claim_id}/validate",
+    response_model=ValidateInstructionClaimResponse,
+)
+def validate_saved_instruction_claim(
+    instruction_id: str,
+    version: int,
+    claim_id: Annotated[str, Path(pattern=r"^claim_[a-f0-9]{32}$")],
+    http_request: Request,
+    request: ValidateInstructionClaimRequest,
+) -> ValidateInstructionClaimResponse:
+    context = require_permission(http_request, "workflow:approve", get_settings())
+    user = context.user
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authenticated reviewer session is required")
+    try:
+        claim = validate_instruction_claim(
+            instruction_id=instruction_id,
+            version=version,
+            claim_id=claim_id,
+            evidence_reference=request.evidence_reference,
+            evidence_sha256=request.evidence_sha256,
+            comment=request.comment,
+            reviewer_user_id=user.user_id,
+            reviewer_name=user.full_name,
+            reviewer_role=cast(EvidenceValidatorRole, user.role),
+            organization_id=context.organization_id,
+            project_id=context.project_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if claim is None:
+        raise HTTPException(status_code=404, detail="Instruction version not found")
+    return ValidateInstructionClaimResponse(
+        claim=claim,
+        message="Evidence claim validated against authenticated local evidence",
+    )
 
 
 @router.get("/{instruction_id}/versions/{version}/execution", response_model=InstructionExecutionList)

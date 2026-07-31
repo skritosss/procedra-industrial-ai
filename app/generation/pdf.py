@@ -132,7 +132,27 @@ def _build_story(payload: InstructionResponse, styles: dict[str, ParagraphStyle]
     _section(story, styles, "Блокеры перед утверждением", instruction.workflow.approval_blockers)
     _section(story, styles, "Следующие действия по внедрению", instruction.workflow.next_actions)
     _section(story, styles, "Матрица ответственности", _responsibility_items())
-    _section(story, styles, "Подтвержденные входные данные", instruction.observed_facts)
+    _section(story, styles, "Утверждения из входных данных", instruction.observed_facts)
+    _section(
+        story,
+        styles,
+        "Происхождение и статус утверждений",
+        [
+            (
+                f"[{claim.claim_id or 'claim_id отсутствует'}; {claim.provenance}; "
+                f"{claim.validation_status}; source={claim.source_id or 'не указан'}] {claim.text}"
+                + (
+                    " | validated by "
+                    f"{claim.validation_record.reviewer_name} "
+                    f"({claim.validation_record.reviewer_role}); "
+                    f"evidence={claim.validation_record.evidence_reference}"
+                    if claim.validation_record
+                    else ""
+                )
+            )
+            for claim in instruction.evidence_claims
+        ],
+    )
     _section(story, styles, "Что требуется проверить локально", instruction.local_verification_required)
     _section(story, styles, "Вопросы для экспертной проверки", instruction.expert_review_questions)
     _section(story, styles, "Средства индивидуальной защиты", instruction.required_ppe)

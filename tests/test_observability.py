@@ -7,8 +7,22 @@ from app.core.observability import RuntimeMetrics
 from app.storage.metrics_store import (
     _record_request_metric,
     initialize_metrics_store,
+    metrics_store_is_read_only_ready,
     metrics_snapshot,
 )
+
+
+def test_metrics_readiness_is_read_only_and_requires_initialized_store(tmp_path: Path) -> None:
+    database_path = tmp_path / "missing" / "metrics.sqlite3"
+
+    assert metrics_store_is_read_only_ready(database_path) is False
+    assert not database_path.exists()
+    assert not database_path.parent.exists()
+
+    initialize_metrics_store(database_path)
+    before = database_path.stat().st_mtime_ns
+    assert metrics_store_is_read_only_ready(database_path) is True
+    assert database_path.stat().st_mtime_ns == before
 
 
 def _record_metrics_in_process(database_path: str, worker: int) -> int:

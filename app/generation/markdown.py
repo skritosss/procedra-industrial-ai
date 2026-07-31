@@ -13,6 +13,28 @@ def _format_time(seconds: float) -> str:
     return f"{minutes:02d}:{remainder:02d}"
 
 
+def _evidence_claim_items(instruction: WorkInstruction) -> list[str]:
+    items = []
+    for claim in instruction.evidence_claims:
+        metadata = "; ".join(
+            [
+                claim.claim_id or "claim_id отсутствует",
+                claim.provenance,
+                claim.validation_status,
+                f"source={claim.source_id or 'не указан'}",
+            ]
+        )
+        item = f"[{metadata}] {claim.text}"
+        if claim.validation_record:
+            item += (
+                " | validated by "
+                f"{claim.validation_record.reviewer_name} ({claim.validation_record.reviewer_role}); "
+                f"evidence={claim.validation_record.evidence_reference}"
+            )
+        items.append(item)
+    return items
+
+
 def render_instruction_markdown(
     instruction: WorkInstruction,
     step_frame_links: list[StepFrameLink] | None = None,
@@ -45,7 +67,8 @@ def render_instruction_markdown(
             "Инженер/технолог уточняет режимы, допуски и локальные требования, отсутствующие во входных данных.",
         ],
     )
-    _extend_list(lines, "Подтвержденные входные данные", instruction.observed_facts)
+    _extend_list(lines, "Утверждения из входных данных", instruction.observed_facts)
+    _extend_list(lines, "Происхождение и статус утверждений", _evidence_claim_items(instruction))
     _extend_list(lines, "Что требуется проверить локально", instruction.local_verification_required)
     _extend_list(lines, "Вопросы для экспертной проверки", instruction.expert_review_questions)
     _extend_list(lines, "Средства индивидуальной защиты", instruction.required_ppe)

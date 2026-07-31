@@ -1,6 +1,9 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+VIDEO_EXTRACTED_CONTEXT_MAX_LENGTH = 12_000
+
+
 class Keyframe(BaseModel):
     frame_index: int = Field(..., ge=0)
     timestamp_seconds: float = Field(..., ge=0)
@@ -100,7 +103,7 @@ class VideoKeyframeResponse(BaseModel):
     keyframes: list[Keyframe] = Field(default_factory=list)
     frame_analyses: list[FrameAnalysis] = Field(default_factory=list)
     video_segments: list[VideoSegment] = Field(default_factory=list)
-    extracted_context: str = Field(default="", max_length=12000)
+    extracted_context: str = Field(default="", max_length=VIDEO_EXTRACTED_CONTEXT_MAX_LENGTH)
     transcript: str = Field(default="", max_length=6000)
     visual_quality: str = Field(default="local", max_length=20)
     notes: list[str] = Field(default_factory=list, max_length=20)

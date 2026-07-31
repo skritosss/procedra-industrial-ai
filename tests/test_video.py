@@ -1,4 +1,5 @@
 from pathlib import Path
+from io import BytesIO
 import urllib.request
 
 import cv2
@@ -16,13 +17,19 @@ from app.core.authorization import create_project, get_resource_ownership, regis
 from app.storage.auth_store import create_organization, create_session, create_user
 from app.vision import keyframes
 from app.vision import frame_analysis
+from app.vision import processing
 from app.vision.frame_analysis import (
     analyze_keyframes,
     build_frame_analysis_context,
     build_video_segment_context,
     build_video_segments,
 )
-from app.vision.keyframes import download_video_from_url, extract_keyframes, save_uploaded_video
+from app.vision.keyframes import (
+    download_video_from_url,
+    extract_keyframes,
+    save_uploaded_video,
+    save_uploaded_video_stream,
+)
 from app.vision.safe_egress import (
     EgressPolicyError,
     ResolvedTarget,
@@ -290,6 +297,117 @@ def test_video_keyframes_endpoint_rejects_unsupported_file() -> None:
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("ingestion", ["upload", "url"])
+@pytest.mark.parametrize("failure_boundary", ["extract", "analysis", "ownership"])
+def test_video_keyframe_ingestion_rolls_back_only_current_artifacts(
+    tmp_path,
+    monkeypatch,
+    ingestion: str,
+    failure_boundary: str,
+) -> None:
+    video_root = tmp_path / "videos"
+    keyframe_root = tmp_path / "keyframes"
+    database_path = tmp_path / "auth.sqlite3"
+    settings = get_settings().model_copy(update={"database_path": database_path})
+    video_id = "a" * 32
+    sibling_id = "b" * 32
+    video_path = video_root / f"{video_id}.mp4"
+    sibling_video = video_root / f"{sibling_id}.mp4"
+    target_keyframes = keyframe_root / video_id
+    sibling_keyframes = keyframe_root / sibling_id
+    events: list[str] = []
+
+    video_root.mkdir(parents=True)
+    sibling_video.write_bytes(b"existing video")
+    sibling_keyframes.mkdir(parents=True)
+    (sibling_keyframes / "frame_01.jpg").write_bytes(b"existing frame")
+    monkeypatch.setattr(keyframes, "UPLOAD_DIR", video_root)
+    monkeypatch.setattr(keyframes, "KEYFRAME_DIR", keyframe_root)
+    monkeypatch.setattr(videos.keyframe_storage, "KEYFRAME_DIR", keyframe_root)
+    monkeypatch.setattr(videos, "get_settings", lambda: settings)
+
+    def acquire_upload(*args, **kwargs):
+        video_path.write_bytes(b"current video")
+        return video_id, video_path
+
+    def acquire_url(*args, **kwargs):
+        video_path.write_bytes(b"current video")
+        return video_id, video_path, {
+            "title": "Current video",
+            "source_url": "https://example.com/video",
+            "visual_quality": "720p",
+        }
+
+    if ingestion == "upload":
+        monkeypatch.setattr(videos, "save_uploaded_video_stream", acquire_upload)
+    else:
+        monkeypatch.setattr(videos, "download_video_from_url", acquire_url)
+
+    def extract(*args, **kwargs):
+        events.append("extract")
+        target_keyframes.mkdir(parents=True)
+        frame_path = target_keyframes / "frame_01.jpg"
+        frame_path.write_bytes(b"current frame")
+        if failure_boundary == "extract":
+            raise ValueError("forced extraction failure")
+        return VideoKeyframeResponse(
+            video_id=video_id,
+            original_filename="Current video",
+            source_url="https://example.com/video" if ingestion == "url" else None,
+            frame_count=1,
+            fps=1,
+            duration_seconds=1,
+            keyframes=[
+                Keyframe(
+                    frame_index=0,
+                    timestamp_seconds=0,
+                    image_path=str(frame_path),
+                    image_url=f"/generated/keyframes/{video_id}/frame_01.jpg",
+                )
+            ],
+            visual_quality="720p" if ingestion == "url" else "uploaded",
+        )
+
+    def analyze(response):
+        events.append("analysis")
+        if failure_boundary == "analysis":
+            raise ValueError("forced analysis failure")
+
+    def register(*args, **kwargs):
+        events.append("ownership")
+        raise ValueError("forced ownership failure")
+
+    monkeypatch.setattr(videos, "extract_keyframes", extract)
+    monkeypatch.setattr(videos, "_attach_frame_analysis", analyze)
+    monkeypatch.setattr(videos, "register_resource_ownership", register)
+
+    client = TestClient(app)
+    if ingestion == "upload":
+        response = client.post(
+            "/api/videos/keyframes",
+            data={"max_keyframes": "4"},
+            files={"file": ("sample.mp4", b"video", "video/mp4")},
+        )
+    else:
+        response = client.post(
+            "/api/videos/keyframes-from-url",
+            data={"video_url": "https://example.com/video", "max_keyframes": "4"},
+        )
+
+    assert response.status_code == 400
+    expected_events = {
+        "extract": ["extract"],
+        "analysis": ["extract", "analysis"],
+        "ownership": ["extract", "analysis", "ownership"],
+    }
+    assert events == expected_events[failure_boundary]
+    assert not video_path.exists()
+    assert not target_keyframes.exists()
+    assert sibling_video.read_bytes() == b"existing video"
+    assert (sibling_keyframes / "frame_01.jpg").read_bytes() == b"existing frame"
+    assert get_resource_ownership("legacy", "video", video_id, database_path=database_path) is None
+
+
 def test_production_keyframes_are_isolated_by_organization(tmp_path, monkeypatch) -> None:
     database_path = tmp_path / "auth.sqlite3"
     keyframe_root = tmp_path / "keyframes"
@@ -423,18 +541,13 @@ def test_video_keyframes_endpoint_rejects_oversized_upload_before_processing(mon
     assert "too large" in response.json()["error"]["message"]
 
 
-def test_read_upload_limited_rejects_unknown_size_stream() -> None:
-    class FakeUpload:
-        def __init__(self):
-            self._chunks = [b"123", b"45"]
-
-        async def read(self, size: int = -1):
-            return self._chunks.pop(0) if self._chunks else b""
-
+def test_streaming_upload_rejects_unknown_size_without_partial_artifact(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(keyframes, "UPLOAD_DIR", tmp_path)
     with pytest.raises(ValueError, match="too large"):
-        import anyio
+        save_uploaded_video_stream("sample.mp4", BytesIO(b"12345"), max_bytes=4, chunk_bytes=3)
 
-        anyio.run(videos._read_upload_limited, FakeUpload(), 4)
+    assert not list(tmp_path.glob("*.mp4"))
+    assert not list(tmp_path.glob(".*.part"))
 
 
 def test_video_keyframes_from_url_endpoint_uses_downloader(monkeypatch, tmp_path) -> None:
@@ -563,7 +676,7 @@ def test_video_keyframes_upload_rejects_invalid_keyframe_count_before_reading_fi
         called = True
         raise AssertionError("upload should not be saved")
 
-    monkeypatch.setattr(videos, "save_uploaded_video", fake_save)
+    monkeypatch.setattr(videos, "save_uploaded_video_stream", fake_save)
     client = TestClient(app)
 
     response = client.post(
@@ -652,6 +765,27 @@ def test_video_response_rejects_unbounded_text_payloads() -> None:
             duration_seconds=1,
             extracted_context="x" * 12001,
         )
+
+
+def test_frame_analysis_context_is_capped_to_response_contract(monkeypatch) -> None:
+    response = VideoKeyframeResponse(
+        video_id="v",
+        original_filename="sample.mp4",
+        frame_count=1,
+        fps=1,
+        duration_seconds=1,
+        extracted_context="base context",
+    )
+    monkeypatch.setattr(processing, "analyze_keyframes", lambda _keyframes: [])
+    monkeypatch.setattr(processing, "build_video_segments", lambda *_args: [])
+    monkeypatch.setattr(processing, "build_video_segment_context", lambda _segments: "s" * 8_000)
+    monkeypatch.setattr(processing, "build_frame_analysis_context", lambda _analyses: "f" * 8_000)
+
+    processing.attach_frame_analysis(response)
+
+    assert len(response.extracted_context) == 12_000
+    assert response.extracted_context.startswith("base context\n\n")
+    VideoKeyframeResponse.model_validate(response.model_dump(mode="json"))
 
 
 def test_video_context_explains_missing_description_and_transcript() -> None:

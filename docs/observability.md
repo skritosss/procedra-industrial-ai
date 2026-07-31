@@ -2,6 +2,11 @@
 
 The service exposes lightweight runtime signals without external dependencies.
 
+Evidence boundary (2026-07-15): endpoint access rules, local persistence, worker
+aggregation, retention behavior, and failure responses are covered by automated
+tests. External collectors, alert delivery, dashboards, production retention,
+load behavior, and deployed multi-host operation are not validated.
+
 ## Headers
 
 Every response includes:
@@ -39,10 +44,21 @@ Basic liveness check.
 GET /ready
 ```
 
-Readiness/configuration check. It reports whether OpenAI mode and public-source
-retrieval are enabled, the active public-source limit, whether runtime artifact
-directories are writable, and whether both business and metrics databases pass
-their health checks.
+Minimal readiness check. The public response only reports `status` so it can be
+used by local healthchecks without exposing the detailed runtime fields returned
+by `/ready/details`. It is not a proof that external model/retrieval dependencies
+or the broader production topology are healthy.
+
+```text
+GET /ready/details
+```
+
+Authenticated readiness/configuration check. It reports whether OpenAI mode and
+public-source retrieval are enabled, the active public-source limit, whether
+runtime artifact directories are writable, and whether both business and metrics
+databases pass their health checks. The nested `capabilities` object separates
+fallback-only, misconfigured-fallback, and configured-but-not-probed external
+model/vision states; it never presents configuration as proof of upstream health.
 
 ```text
 GET /metrics
@@ -74,6 +90,10 @@ sample are configurable through `METRICS_*` settings. `METRICS_DATABASE_PATH`
 must differ from `DATABASE_PATH`, retention must cover the query window, and the
 window must cover at least one bucket.
 
-When `API_ACCESS_TOKEN` is configured, `/metrics` requires the same
-`Authorization: Bearer <token>` header as protected API calls. External alert
-delivery and dashboards are deployment integrations and were not added here.
+`/metrics` is private by default and requires an authenticated user session or
+the same `Authorization: Bearer <token>` header as protected API calls. A demo
+may deliberately set `METRICS_PUBLIC_ENABLED=true` for a local-only dashboard
+while keeping the Compose bind host at `127.0.0.1`. Production configuration
+rejects that flag, so production metrics cannot bypass authentication. External
+alert delivery and dashboards are deployment integrations and were not added
+here.

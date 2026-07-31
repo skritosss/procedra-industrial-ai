@@ -154,7 +154,9 @@ const translations = {
           approvalBlockers: "Блокеры перед утверждением",
           workflowNextActions: "Следующие действия по внедрению",
           responsibilityMatrix: "Матрица ответственности",
-          observedFacts: "Подтвержденные входные данные",
+          observedFacts: "Утверждения из входных данных",
+          evidenceProvenance: "Происхождение и статус утверждений",
+          safetyFindings: "Safety-блокеры",
           localVerificationRequired: "Что требуется проверить локально",
           expertReviewQuestions: "Вопросы для экспертной проверки",
           department: "Участок",
@@ -203,8 +205,12 @@ const translations = {
           sourceInfluence: "Влияние на инструкцию",
           matchedTerms: "Совпавшие термины",
           noSources: "Источники не найдены",
+          videoToolsTitle: "Видео и визуальный контекст",
+          videoToolsDescription: "Загрузите файл или укажите ссылку, чтобы извлечь ключевые кадры перед генерацией.",
           videoUrlLabel: "Ссылка на видео",
           videoFileLabel: "Видео для анализа",
+          chooseFile: "Выбрать файл",
+          noFileSelected: "Файл не выбран",
           maxKeyframesLabel: "Ключевых кадров",
           visualQualityLabel: "Качество кадров",
           visualQualityFast: "240p - быстро",
@@ -214,6 +220,11 @@ const translations = {
           extractVideoButton: "Извлечь ключевые кадры",
           generateFromVideoButton: "Сформировать инструкцию по видео",
           videoStatusLoading: "Обработка видео...",
+          videoStatusProgress: "Обработка видео: {progress}%",
+          videoStatusCancelRequested: "Запрошена отмена обработки...",
+          videoStatusCancelled: "Обработка видео отменена",
+          videoStatusFailed: "Не удалось обработать видео",
+          cancelVideoJob: "Отменить обработку",
           videoStatusReady: "Кадры извлечены",
           videoInstructionLoading: "Формирование инструкции по видео...",
           videoStatusNoInput: "Вставьте ссылку или выберите видеофайл",
@@ -221,6 +232,8 @@ const translations = {
           videoStatusNoProcessedVideo: "Сначала извлеките данные из видео",
           videoStatusNoKeyframes: "В видео не найдено ключевых кадров для инструкции",
           documentFileLabel: "Документ предприятия",
+          documentToolsTitle: "Документы предприятия",
+          documentToolsDescription: "Добавьте локальный документ в базу источников для следующих генераций.",
           uploadDocumentButton: "Загрузить документ",
           documentUploadLoading: "Загрузка документа...",
           documentUploadReady: "Документ добавлен в источники",
@@ -470,7 +483,9 @@ const translations = {
           approvalBlockers: "Approval blockers",
           workflowNextActions: "Next implementation actions",
           responsibilityMatrix: "Responsibility matrix",
-          observedFacts: "Confirmed input facts",
+          observedFacts: "Input claims",
+          evidenceProvenance: "Claim provenance and status",
+          safetyFindings: "Safety blockers",
           localVerificationRequired: "Local verification required",
           expertReviewQuestions: "Expert review questions",
           department: "Department",
@@ -519,8 +534,12 @@ const translations = {
           sourceInfluence: "Instruction influence",
           matchedTerms: "Matched terms",
           noSources: "No sources found",
+          videoToolsTitle: "Video and visual context",
+          videoToolsDescription: "Upload a file or provide a URL to extract keyframes before generation.",
           videoUrlLabel: "Video URL",
           videoFileLabel: "Video for analysis",
+          chooseFile: "Choose file",
+          noFileSelected: "No file selected",
           maxKeyframesLabel: "Keyframes",
           visualQualityLabel: "Frame quality",
           visualQualityFast: "240p - fast",
@@ -530,6 +549,11 @@ const translations = {
           extractVideoButton: "Extract keyframes",
           generateFromVideoButton: "Generate from video",
           videoStatusLoading: "Processing video...",
+          videoStatusProgress: "Processing video: {progress}%",
+          videoStatusCancelRequested: "Cancelling video processing...",
+          videoStatusCancelled: "Video processing cancelled",
+          videoStatusFailed: "Video processing failed",
+          cancelVideoJob: "Cancel processing",
           videoStatusReady: "Keyframes extracted",
           videoInstructionLoading: "Generating from video...",
           videoStatusNoInput: "Paste a video URL or choose a video file",
@@ -537,6 +561,8 @@ const translations = {
           videoStatusNoProcessedVideo: "Extract video data first",
           videoStatusNoKeyframes: "No keyframes were found for instruction generation",
           documentFileLabel: "Enterprise document",
+          documentToolsTitle: "Enterprise documents",
+          documentToolsDescription: "Add a local document to the source base for future generations.",
           uploadDocumentButton: "Upload document",
           documentUploadLoading: "Uploading document...",
           documentUploadReady: "Document added to sources",
@@ -865,12 +891,19 @@ const translations = {
       let activeTab = "instruction";
       let lastPayload = null;
       let lastVideoPayload = null;
+      let currentVideoJobId = sessionStorage.getItem("currentVideoJobId") || "";
       let historyRecords = [];
       let currentHistoryRecord = null;
       let currentAuditEvents = [];
       let executionSummary = null;
       let pendingWorkflowDecision = null;
       let currentUser = null;
+      let authCapabilities = {
+        public_registration_enabled: false,
+        role_self_assignment_enabled: false,
+        allowed_registration_roles: ["operator"],
+        minimum_password_length: 8,
+      };
       let shopFloorMode = localStorage.getItem("shopFloorMode") === "true";
 
       // Remove credentials left by pre-cookie builds; session tokens must never
@@ -882,6 +915,10 @@ const translations = {
       const sampleButton = document.getElementById("sample-button");
       const videoButton = document.getElementById("video-button");
       const videoGenerateButton = document.getElementById("video-generate-button");
+      const videoCancelButton = document.getElementById("video-cancel-button");
+      const videoJobProgress = document.getElementById("video-job-progress");
+      const videoJobProgressBar = document.getElementById("video-job-progress-bar");
+      const videoJobProgressLabel = document.getElementById("video-job-progress-label");
       const documentButton = document.getElementById("document-button");
       const improveInstructionButton = document.getElementById("improve-instruction");
       const saveHistoryButton = document.getElementById("save-history");
@@ -949,8 +986,22 @@ const translations = {
         syncAuthControls();
         fillSampleCases();
         syncContextControls();
+        syncSelectedFileNames();
         loadDocuments();
         renderResult();
+      }
+
+      function syncFilePicker(inputId, nameId) {
+        const input = document.getElementById(inputId);
+        const name = document.getElementById(nameId);
+        const file = input.files && input.files[0];
+        name.textContent = file ? file.name : t("noFileSelected");
+        name.title = file ? file.name : "";
+      }
+
+      function syncSelectedFileNames() {
+        syncFilePicker("video_file", "video-file-name");
+        syncFilePicker("document_file", "document-file-name");
       }
 
       function fillSelect(id, labels) {
@@ -994,13 +1045,16 @@ const translations = {
       function fillAuthRoles() {
         const currentValue = authRoleSelect.value || "operator";
         authRoleSelect.innerHTML = "";
-        userRoleValues.forEach((value) => {
+        const allowedRoles = userRoleValues.filter((value) =>
+          authCapabilities.allowed_registration_roles.includes(value),
+        );
+        allowedRoles.forEach((value) => {
           const option = document.createElement("option");
           option.value = value;
           option.textContent = translations[language].userRoles[value];
           authRoleSelect.appendChild(option);
         });
-        authRoleSelect.value = userRoleValues.includes(currentValue) ? currentValue : "operator";
+        authRoleSelect.value = allowedRoles.includes(currentValue) ? currentValue : allowedRoles[0] || "operator";
       }
 
       function applyInstructionPayloadToForm(payload) {
@@ -1022,8 +1076,8 @@ const translations = {
 
       async function apiFetch(url, options = {}, retryAfterToken = true) {
         const headers = new Headers(options.headers || {});
-        const hasBrowserSession = Boolean(cookieValue("industrial_ai_csrf"));
-        const token = hasBrowserSession ? "" : apiTokenInput.value.trim();
+        const hasAuthenticatedUser = Boolean(currentUser);
+        const token = hasAuthenticatedUser ? "" : apiTokenInput.value.trim();
         if (token && !headers.has("Authorization")) {
           headers.set("Authorization", `Bearer ${token}`);
         }
@@ -1036,7 +1090,11 @@ const translations = {
         }
         const response = await fetch(url, { ...options, headers, credentials: "same-origin" });
         if (response.status === 401 && retryAfterToken) {
-          const promptedToken = window.prompt(t("authTokenPrompt"), token);
+          if (hasAuthenticatedUser) {
+            currentUser = null;
+            syncAuthControls();
+          }
+          const promptedToken = window.prompt(t("authTokenPrompt"), apiTokenInput.value.trim());
           if (promptedToken && promptedToken.trim()) {
             apiTokenInput.value = promptedToken.trim();
             return apiFetch(url, options, false);
@@ -1062,12 +1120,40 @@ const translations = {
           authOpenButton.hidden = false;
           authLogoutButton.hidden = true;
         }
+        const registerOption = authModeSelect.querySelector('option[value="register"]');
+        registerOption.hidden = !authCapabilities.public_registration_enabled;
+        registerOption.disabled = !authCapabilities.public_registration_enabled;
+        if (!authCapabilities.public_registration_enabled && authModeSelect.value === "register") {
+          authModeSelect.value = "login";
+        }
         const isRegister = authModeSelect.value === "register";
         document.querySelectorAll("[data-auth-register-only]").forEach((element) => {
           element.hidden = !isRegister;
         });
         authFullNameInput.required = isRegister;
+        authRoleSelect.disabled = !authCapabilities.role_self_assignment_enabled;
+        authPasswordInput.minLength = authCapabilities.minimum_password_length;
         authPasswordInput.autocomplete = isRegister ? "new-password" : "current-password";
+      }
+
+      async function loadAuthCapabilities() {
+        try {
+          const response = await apiFetch("/api/auth/config", {}, false);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          authCapabilities = {
+            public_registration_enabled: Boolean(payload.public_registration_enabled),
+            role_self_assignment_enabled: Boolean(payload.role_self_assignment_enabled),
+            allowed_registration_roles: Array.isArray(payload.allowed_registration_roles)
+              ? payload.allowed_registration_roles.filter((role) => userRoleValues.includes(role))
+              : ["operator"],
+            minimum_password_length: Number(payload.minimum_password_length) || 8,
+          };
+        } catch (_) {
+          // Fail closed: login remains available while unsupported registration controls stay hidden.
+        }
+        fillAuthRoles();
+        syncAuthControls();
       }
 
       async function loadCurrentUser() {
@@ -1159,6 +1245,7 @@ const translations = {
       }
 
       function resetProcessedVideoState() {
+        if (currentVideoJobId) return;
         lastVideoPayload = null;
         videoGenerateButton.disabled = true;
         if (activeTab === "video") {
@@ -1224,6 +1311,7 @@ const translations = {
             throw new Error(await responseErrorMessage(response));
           }
           input.value = "";
+          syncFilePicker("document_file", "document-file-name");
           document.getElementById("use_context").checked = true;
           syncContextControls();
           await loadDocuments();
@@ -1584,6 +1672,17 @@ const translations = {
             <section><h3>${t("ppe")}</h3>${renderList(instruction.required_ppe)}</section>
             <section><h3>${t("responsibilityMatrix")}</h3>${renderList(responsibilityItems())}</section>
             <section><h3>${t("observedFacts")}</h3>${renderList(instruction.observed_facts)}</section>
+            <section><h3>${t("evidenceProvenance")}</h3>${renderList(
+              (instruction.evidence_claims || []).map(
+                (claim) => {
+                  const record = claim.validation_record;
+                  const validation = record
+                    ? ` · ${record.reviewer_name} (${record.reviewer_role}) · ${record.evidence_reference}`
+                    : "";
+                  return `[${claim.claim_id || "no-claim-id"}; ${claim.provenance}; ${claim.validation_status}; source=${claim.source_id || "none"}] ${claim.text}${validation}`;
+                },
+              ),
+            )}</section>
             <section><h3>${t("localVerificationRequired")}</h3>${renderList(instruction.local_verification_required)}</section>
             <section><h3>${t("expertReviewQuestions")}</h3>${renderList(instruction.expert_review_questions)}</section>
             <section><h3>${t("tools")}</h3>${renderList(instruction.required_tools)}</section>
@@ -1645,6 +1744,11 @@ const translations = {
               </div>
             </section>
             <section><h3>${t("expertReview")}</h3>${renderList(evaluation.expert_review_notes)}</section>
+            <section><h3>${t("safetyFindings")}</h3>${renderList(
+              (evaluation.safety_findings || []).map(
+                (finding) => `[${finding.severity}; ${finding.code}] ${finding.message}`,
+              ),
+            )}</section>
             <section>
               <h3>${t("criteria")}</h3>
               <div class="criteria-grid">
@@ -1876,6 +1980,7 @@ const translations = {
         if (activeButton) {
           result.setAttribute("aria-labelledby", activeButton.id);
         }
+        syncSidebarState(activeTab);
       }
 
       function focusableModalElements(modal) {
@@ -2447,14 +2552,12 @@ const translations = {
         status.textContent = t("videoStatusLoading");
         status.classList.remove("error");
         lastVideoPayload = null;
-        videoButton.disabled = true;
-        videoGenerateButton.disabled = true;
+        setVideoJobBusy(true);
         if (activeTab === "video") {
           renderResult();
         }
         try {
           const formData = new FormData();
-          const endpoint = file ? "/api/videos/keyframes" : "/api/videos/keyframes-from-url";
           if (file) {
             formData.append("file", file);
           } else {
@@ -2462,25 +2565,123 @@ const translations = {
             formData.append("visual_quality", document.getElementById("visual_quality").value);
           }
           formData.append("max_keyframes", document.getElementById("max_keyframes").value);
-          const response = await apiFetch(endpoint, {
+          const idempotencyKey = window.crypto && typeof window.crypto.randomUUID === "function"
+            ? window.crypto.randomUUID()
+            : `video-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const response = await apiFetch("/api/videos/jobs", {
             method: "POST",
+            headers: { "Idempotency-Key": idempotencyKey },
             body: formData,
           });
           if (!response.ok) {
             throw new Error(await responseErrorMessage(response));
           }
-          lastVideoPayload = await response.json();
-          videoGenerateButton.disabled = !(lastVideoPayload.keyframes && lastVideoPayload.keyframes.length);
-          activeTab = "video";
-          syncTabState();
-          status.textContent = videoGenerateButton.disabled ? t("videoStatusNoKeyframes") : t("videoStatusReady");
-          status.classList.toggle("error", videoGenerateButton.disabled);
-          renderResult();
+          const job = await response.json();
+          currentVideoJobId = job.job_id;
+          sessionStorage.setItem("currentVideoJobId", currentVideoJobId);
+          await pollVideoJob(currentVideoJobId, job);
         } catch (error) {
           status.textContent = `${t("statusError")}: ${error.message}`;
           status.classList.add("error");
-        } finally {
-          videoButton.disabled = false;
+          if (!currentVideoJobId) setVideoJobBusy(false);
+        }
+      }
+
+      function setVideoJobBusy(isBusy) {
+        ["video_url", "video_file", "max_keyframes", "visual_quality"].forEach((id) => {
+          document.getElementById(id).disabled = isBusy;
+        });
+        videoButton.disabled = isBusy;
+        videoGenerateButton.disabled =
+          isBusy || !(lastVideoPayload && lastVideoPayload.keyframes && lastVideoPayload.keyframes.length);
+        videoJobProgress.hidden = !isBusy;
+        videoCancelButton.disabled = !isBusy;
+      }
+
+      function renderVideoJobProgress(job) {
+        const progress = Math.max(0, Math.min(100, Number(job.progress_percent) || 0));
+        videoJobProgressBar.value = progress;
+        videoJobProgressBar.textContent = `${progress}%`;
+        videoJobProgressLabel.textContent = job.cancel_requested
+          ? t("videoStatusCancelRequested")
+          : t("videoStatusProgress").replace("{progress}", progress);
+        status.textContent = videoJobProgressLabel.textContent;
+        status.classList.remove("error");
+      }
+
+      async function pollVideoJob(jobId, initialJob = null) {
+        setVideoJobBusy(true);
+        let job = initialJob;
+        while (currentVideoJobId === jobId) {
+          if (!job) {
+            const response = await apiFetch(`/api/videos/jobs/${encodeURIComponent(jobId)}`);
+            if (!response.ok) throw new Error(await responseErrorMessage(response));
+            job = await response.json();
+          }
+          renderVideoJobProgress(job);
+          if (job.status === "succeeded") {
+            const response = await apiFetch(`/api/videos/jobs/${encodeURIComponent(jobId)}/result`);
+            if (!response.ok) throw new Error(await responseErrorMessage(response));
+            lastVideoPayload = await response.json();
+            finishVideoJob();
+            videoGenerateButton.disabled = !(lastVideoPayload.keyframes && lastVideoPayload.keyframes.length);
+            activeTab = "video";
+            syncTabState();
+            status.textContent = videoGenerateButton.disabled ? t("videoStatusNoKeyframes") : t("videoStatusReady");
+            status.classList.toggle("error", videoGenerateButton.disabled);
+            renderResult();
+            return;
+          }
+          if (job.status === "failed") {
+            const message = job.error_message || t("videoStatusFailed");
+            finishVideoJob();
+            status.textContent = `${t("videoStatusFailed")}: ${message}`;
+            status.classList.add("error");
+            return;
+          }
+          if (job.status === "cancelled") {
+            finishVideoJob();
+            status.textContent = t("videoStatusCancelled");
+            status.classList.remove("error");
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          job = null;
+        }
+      }
+
+      function finishVideoJob() {
+        currentVideoJobId = "";
+        sessionStorage.removeItem("currentVideoJobId");
+        setVideoJobBusy(false);
+      }
+
+      async function cancelVideoJob() {
+        if (!currentVideoJobId) return;
+        videoCancelButton.disabled = true;
+        status.textContent = t("videoStatusCancelRequested");
+        try {
+          const response = await apiFetch(`/api/videos/jobs/${encodeURIComponent(currentVideoJobId)}`, {
+            method: "DELETE",
+          });
+          if (!response.ok) throw new Error(await responseErrorMessage(response));
+          renderVideoJobProgress(await response.json());
+        } catch (error) {
+          status.textContent = `${t("statusError")}: ${error.message}`;
+          status.classList.add("error");
+          videoCancelButton.disabled = false;
+        }
+      }
+
+      async function resumeVideoJob() {
+        if (!currentVideoJobId) return;
+        try {
+          await pollVideoJob(currentVideoJobId);
+        } catch (error) {
+          status.textContent = `${t("statusError")}: ${error.message}`;
+          status.classList.add("error");
+          setVideoJobBusy(true);
+          videoCancelButton.disabled = false;
         }
       }
 
@@ -2679,7 +2880,6 @@ const translations = {
         button.addEventListener("click", () => {
           activeTab = button.dataset.resultView;
           syncTabState();
-          syncSidebarState(activeTab);
           if (activeTab === "history") {
             loadHistory(true);
           }
@@ -2781,11 +2981,18 @@ const translations = {
         }
       });
       document.getElementById("use_context").addEventListener("change", syncContextControls);
+      document.getElementById("video_file").addEventListener("change", () =>
+        syncFilePicker("video_file", "video-file-name"),
+      );
+      document.getElementById("document_file").addEventListener("change", () =>
+        syncFilePicker("document_file", "document-file-name"),
+      );
       ["video_url", "video_file", "max_keyframes", "visual_quality"].forEach((id) => {
         document.getElementById(id).addEventListener("change", resetProcessedVideoState);
       });
       document.getElementById("video_url").addEventListener("input", resetProcessedVideoState);
       videoButton.addEventListener("click", submitVideo);
+      videoCancelButton.addEventListener("click", cancelVideoJob);
       videoGenerateButton.addEventListener("click", submitVideoInstruction);
       documentButton.addEventListener("click", uploadDocument);
       improveInstructionButton.addEventListener("click", improveCurrentInstruction);
@@ -2853,7 +3060,9 @@ const translations = {
       });
       videoGenerateButton.disabled = true;
       syncTabState();
+      syncSidebarState("generator");
       syncExportButtons();
       loadHistory();
-      loadCurrentUser();
+      loadAuthCapabilities();
+      loadCurrentUser().then(resumeVideoJob);
       localizeStaticText();

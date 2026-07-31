@@ -328,6 +328,37 @@ def test_admin_audit_events_are_append_only(tmp_path) -> None:
             connection.execute("DELETE FROM admin_audit_events WHERE event_id = ?", (event_id,))
 
 
+def test_admin_audit_hash_chain_detects_out_of_band_tampering(tmp_path) -> None:
+    database_path = tmp_path / "tampered-admin-audit.sqlite3"
+    organization_id = create_organization("Tamper Audit", database_path=database_path)
+    admin = create_user(
+        "tamper-admin@example.com",
+        "Tamper Admin",
+        "strong-password-1",
+        role="admin",
+        organization_id=organization_id,
+        database_path=database_path,
+    )
+    create_invitation(
+        organization_id,
+        admin.user_id,
+        "tamper-user@example.com",
+        "Tamper User",
+        "operator",
+        [],
+        ttl_seconds=300,
+        database_path=database_path,
+    )
+    assert verify_database(database_path)["admin_audit_chain"] == "ok"
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("DROP TRIGGER admin_audit_events_no_update")
+        connection.execute("UPDATE admin_audit_events SET details_json = '{}'")
+
+    with pytest.raises(ValueError, match="Admin audit event chain hash is invalid"):
+        verify_database(database_path)
+
+
 def test_database_verification_rejects_cross_tenant_invitation_project(tmp_path) -> None:
     database_path = tmp_path / "tampered-invitation.sqlite3"
     organization_a = create_organization("Invite A", database_path=database_path)

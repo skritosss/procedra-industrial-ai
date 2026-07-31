@@ -9,6 +9,7 @@ from app.api.instructions import _compact_video_context
 from app.generation import pipeline
 from app.main import app
 from app.storage.auth_store import create_organization, create_session, create_user
+from app.storage.metrics_store import initialize_metrics_store
 from app.core.authorization import register_resource_ownership
 
 
@@ -91,7 +92,9 @@ def test_web_app_returns_language_switcher() -> None:
     assert 'id="video-generate-button"' in source
     assert 'data-result-view="video"' in source
     assert 'data-result-view="history"' in source
-    assert "keyframes-from-url" in source
+    assert "/api/videos/jobs" in source
+    assert 'id="video-job-progress"' in source
+    assert 'id="video-cancel-button"' in source
     assert "videoStatusBothInputs" in source
     assert "generateFromVideoButton" in source
     assert "uploadDocument" in source
@@ -147,8 +150,10 @@ def test_web_app_returns_language_switcher() -> None:
     assert 'credentials: "same-origin"' in source
     assert '"X-Auth-Transport": "cookie"' in source
     assert 'cookieValue("industrial_ai_csrf")' in source
-    assert 'const hasBrowserSession = Boolean(cookieValue("industrial_ai_csrf"))' in source
-    assert 'const token = hasBrowserSession ? "" : apiTokenInput.value.trim()' in source
+    assert "const hasAuthenticatedUser = Boolean(currentUser)" in source
+    assert 'const token = hasAuthenticatedUser ? "" : apiTokenInput.value.trim()' in source
+    assert "headers.set(\"Authorization\", `Bearer ${token}`)" in source
+    assert 'window.prompt(t("authTokenPrompt"), apiTokenInput.value.trim())' in source
     assert "!reviewerRoleValues.includes(currentUser.role)" in source
     assert "workflowReviewerInput.disabled = Boolean(currentUser)" in source
     assert "/api/auth/register" in source
@@ -299,13 +304,28 @@ def test_unsafe_request_id_header_is_replaced() -> None:
     assert response.headers["X-Request-ID"]
 
 
-def test_ready_endpoint_reports_runtime_configuration() -> None:
+def test_ready_endpoint_reports_minimal_public_status() -> None:
     client = TestClient(app)
 
     response = client.get("/ready")
 
     assert response.status_code == 200
-    payload = response.json()
+    assert response.json() == {"status": "ready"}
+
+
+def test_ready_details_requires_observability_access(monkeypatch) -> None:
+    settings = get_settings().model_copy(update={"api_access_token": "secret-demo-token"})
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    client = TestClient(app)
+
+    unauthorized = client.get("/ready/details")
+    authorized = client.get("/ready/details", headers={"Authorization": "Bearer secret-demo-token"})
+
+    assert unauthorized.status_code == 401
+    assert unauthorized.json()["error"]["code"] == "unauthorized"
+    assert authorized.status_code == 200
+    payload = authorized.json()
     assert payload["status"] == "ready"
     assert payload["deployment_mode"] in {"demo", "production"}
     assert isinstance(payload["openai_enabled"], bool)
@@ -316,11 +336,24 @@ def test_ready_endpoint_reports_runtime_configuration() -> None:
     assert isinstance(payload["public_registration_enabled"], bool)
     assert isinstance(payload["role_self_assignment_enabled"], bool)
     assert payload["auth_session_ttl_seconds"] >= 300
+    assert payload["auth_session_idle_timeout_seconds"] >= 300
+    assert payload["auth_session_retention_seconds"] >= 3600
     assert isinstance(payload["rate_limit_enabled"], bool)
     assert payload["rate_limit_requests"] > 0
     assert payload["auth_rate_limit_requests"] > 0
+    assert payload["metrics_public_enabled"] is False
     assert isinstance(payload["trust_proxy_headers"], bool)
     assert isinstance(payload["video_allowed_hosts"], list)
+    assert payload["capabilities"]["model_generation"]["external_health"] == "not_probed"
+    assert payload["capabilities"]["vision_analysis"]["mode"] in {
+        "fallback_only",
+        "configured_not_probed",
+        "misconfigured_fallback",
+    }
+    assert payload["capabilities"]["public_source_catalog"]["mode"] in {
+        "local_catalog",
+        "disabled",
+    }
     assert payload["generated_dir_writable"] is True
     assert payload["keyframes_dir_writable"] is True
     assert payload["instructions_dir_writable"] is True
@@ -331,29 +364,101 @@ def test_ready_endpoint_reports_runtime_configuration() -> None:
     assert payload["metrics_database_ready"] is True
 
 
+def test_observability_endpoints_accept_authenticated_user_session(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "auth.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "metrics_database_path": tmp_path / "metrics.sqlite3",
+        }
+    )
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    organization_id = create_organization("Observability", database_path=database_path)
+    user = create_user(
+        "observability@example.com",
+        "Observability User",
+        "strong-observability-password",
+        organization_id=organization_id,
+        database_path=database_path,
+    )
+    session_token = create_session(user.user_id, database_path=database_path)
+    initialize_metrics_store(settings.metrics_database_path)
+    headers = {"Authorization": f"Bearer {session_token}"}
+    client = TestClient(app)
+
+    details = client.get("/ready/details", headers=headers)
+    metrics = client.get("/metrics", headers=headers)
+
+    assert details.status_code == 200
+    assert metrics.status_code == 200
+
+
+def test_public_metrics_flag_cannot_bypass_production_observability_auth(tmp_path, monkeypatch) -> None:
+    static_token = "production-observability-token-at-least-32-characters"
+    settings = get_settings().model_copy(
+        update={
+            "deployment_mode": "production",
+            "api_access_token": static_token,
+            "metrics_public_enabled": True,
+            "database_path": tmp_path / "auth.sqlite3",
+            "metrics_database_path": tmp_path / "metrics.sqlite3",
+        }
+    )
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    client = TestClient(app)
+
+    unauthorized_metrics = client.get("/metrics")
+    unauthorized_details = client.get("/ready/details")
+    authorized_metrics = client.get("/metrics", headers={"Authorization": f"Bearer {static_token}"})
+
+    assert unauthorized_metrics.status_code == 401
+    assert unauthorized_details.status_code == 401
+    assert authorized_metrics.status_code == 200
+
+
 def test_ready_endpoint_reports_degraded_when_database_check_fails(monkeypatch) -> None:
-    monkeypatch.setattr("app.storage.auth_store.database_is_ready", lambda database_path=None: False)
+    monkeypatch.setattr("app.storage.auth_store.database_is_read_only", lambda database_path=None: False)
     client = TestClient(app)
 
     response = client.get("/ready")
 
     assert response.status_code == 503
-    assert response.json()["status"] == "degraded"
-    assert response.json()["database_ready"] is False
+    assert response.json() == {"status": "degraded"}
 
 
 def test_ready_endpoint_reports_degraded_when_metrics_database_fails(monkeypatch) -> None:
-    monkeypatch.setattr("app.storage.metrics_store.metrics_store_is_ready", lambda database_path: False)
+    monkeypatch.setattr(
+        "app.storage.metrics_store.metrics_store_is_read_only_ready",
+        lambda database_path: False,
+    )
     client = TestClient(app)
 
-    response = client.get("/ready")
+    settings = get_settings().model_copy(update={"metrics_public_enabled": True})
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+
+    response = client.get("/ready/details")
 
     assert response.status_code == 503
     assert response.json()["status"] == "degraded"
     assert response.json()["metrics_database_ready"] is False
 
 
-def test_metrics_endpoint_reports_request_counters() -> None:
+def test_metrics_endpoint_is_private_by_default() -> None:
+    runtime_metrics.reset()
+    client = TestClient(app)
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_metrics_endpoint_reports_request_counters_when_public_enabled(monkeypatch) -> None:
+    settings = get_settings().model_copy(update={"metrics_public_enabled": True})
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
     runtime_metrics.reset()
     client = TestClient(app)
 
@@ -373,6 +478,8 @@ def test_metrics_endpoint_reports_request_counters() -> None:
 
 
 def test_metrics_backend_failure_is_visible_but_does_not_break_requests(monkeypatch) -> None:
+    settings = get_settings().model_copy(update={"metrics_public_enabled": True})
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
     monkeypatch.setattr("app.core.observability.record_request_metric", lambda *args, **kwargs: False)
     monkeypatch.setattr("app.core.observability.metrics_snapshot", lambda *args, **kwargs: (_ for _ in ()).throw(OSError()))
     runtime_metrics.reset()
@@ -463,6 +570,7 @@ def test_api_auth_can_be_enabled_with_bearer_token(monkeypatch) -> None:
 def test_metrics_endpoint_respects_api_access_token(monkeypatch) -> None:
     settings = get_settings().model_copy(update={"api_access_token": "secret-demo-token"})
     monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
     client = TestClient(app)
 
     unauthorized = client.get("/metrics")

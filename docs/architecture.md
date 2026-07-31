@@ -23,6 +23,15 @@ Generation Pipeline
   quality evaluation
   Markdown rendering
 
+Durable Video Jobs (single host)
+  schema-v10 SQLite queue
+  tenant/project-scoped idempotency
+  atomic worker lease + heartbeat
+  download/extract/analyze subprocess isolation
+  hard stage budgets + process-group cancellation
+  bounded retry + artifact cleanup
+  persisted status/result
+
 Output
   structured instruction
   quality evaluation
@@ -34,11 +43,13 @@ Output
 
 Packaging
   Docker runtime
-  Docker Compose local demo
+  Docker Compose API + video worker
   GitHub Actions CI
 ```
 
-The implementation keeps the pipeline modular. Text generation, retrieval, video text extraction, visual keyframe extraction, and evaluation can be tested independently before adding frame-level vision captions.
+The implementation keeps the pipeline modular. Text generation, retrieval,
+video text extraction, visual keyframe extraction, frame-level vision analysis,
+and evaluation can be tested independently.
 
 ## Retrieval
 
@@ -51,7 +62,23 @@ Video URL processing deliberately separates:
 - metadata and subtitle extraction, which does not need the visual stream;
 - visual stream download, which uses the selected frame quality for keyframe extraction.
 
-This avoids downloading high-resolution video for transcript-only work while still allowing better frames for future vision analysis.
+This avoids downloading high-resolution video for transcript-only work while
+allowing the implemented vision stage to analyze frames at the selected quality.
+
+The browser enqueues video work and polls persisted status instead of keeping a
+download/extraction request open. The API and worker share the versioned SQLite
+database plus generated/upload volumes. This survives an API restart and lets a
+new worker reclaim an expired lease. It does not provide active-active or
+multi-host queue semantics; that boundary still requires a distributed queue
+and database architecture decision.
+
+The queued worker runs download, OpenCV extraction, and frame analysis in
+separate child processes. The parent keeps the job lease alive and polls the
+persisted cancellation state. A stage deadline, user cancellation, or lost
+lease terminates the child's process group before the worker changes job state,
+so blocking native/provider work cannot hold the one-job worker indefinitely.
+This contract applies to the primary queued path; the older synchronous
+compatibility endpoints remain request-bound.
 
 ## Frame Analysis
 

@@ -574,6 +574,211 @@ def test_authenticated_reviewer_identity_overrides_request_body(tmp_path, monkey
     assert audit[-1]["metadata"]["actor_role"] == "safety"
 
 
+def test_authenticated_reviewer_validates_specific_claim_with_audit_record(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    history_path = tmp_path / "history"
+    settings = get_settings().model_copy(
+        update={
+            "api_access_token": "static-token",
+            "database_path": history_path / instruction_history.HISTORY_DATABASE_FILENAME,
+        }
+    )
+    monkeypatch.setattr(instruction_history, "INSTRUCTION_HISTORY_DIR", history_path)
+    monkeypatch.setattr("app.api.history.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.instructions.get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    client = TestClient(app)
+    auth = client.post(
+        "/api/auth/register",
+        json={
+            "email": "claim-validator@example.com",
+            "full_name": "Инженер Валидатор",
+            "password": "strong-password-1",
+            "role": "safety",
+        },
+    ).json()
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    generated = client.post(
+        "/api/instructions/generate",
+        headers=headers,
+        json={
+            "task": "Проверить аварийную остановку перед запуском оборудования",
+            "technical_context": "Оператор сообщил, что ограждение установлено перед запуском.",
+        },
+    ).json()
+    saved = client.post(
+        "/api/instructions/history",
+        headers=headers,
+        json={"payload": generated},
+    ).json()["record"]
+    claim = generated["instruction"]["evidence_claims"][0]
+    endpoint = (
+        f"/api/instructions/history/{saved['instruction_id']}/versions/{saved['version']}"
+        f"/claims/{claim['claim_id']}/validate"
+    )
+
+    response = client.post(
+        endpoint,
+        headers=headers,
+        json={
+            "evidence_reference": "Approved local procedure LP-17 revision 4",
+            "evidence_sha256": "a" * 64,
+            "comment": "Claim checked against the controlled local procedure.",
+        },
+    )
+
+    assert response.status_code == 200
+    validated = response.json()["claim"]
+    assert validated["claim_id"] == claim["claim_id"]
+    assert validated["provenance"] == "validated_local"
+    assert validated["validation_status"] == "validated"
+    assert validated["requires_local_verification"] is False
+    assert validated["validation_record"]["reviewer_user_id"] == auth["user"]["user_id"]
+    assert validated["validation_record"]["reviewer_name"] == auth["user"]["full_name"]
+    assert validated["validation_record"]["reviewer_role"] == "safety"
+
+    detail_url = f"/api/instructions/history/{saved['instruction_id']}/versions/{saved['version']}"
+    detail = client.get(detail_url, headers=headers).json()
+    persisted = next(
+        item
+        for item in detail["payload"]["instruction"]["evidence_claims"]
+        if item["claim_id"] == claim["claim_id"]
+    )
+    assert persisted == validated
+    assert "validated_local" in detail["payload"]["markdown"]
+    assert "Approved local procedure LP-17 revision 4" in detail["payload"]["markdown"]
+    assert detail["payload"]["instruction"]["workflow"]["status"] == "ai_draft"
+    audit = client.get(detail_url + "/audit", headers=headers).json()["events"]
+    assert [event["event_type"] for event in audit] == ["version_saved", "claim_validated"]
+    assert audit[-1]["metadata"]["claim_id"] == claim["claim_id"]
+    assert audit[-1]["metadata"]["actor_user_id"] == auth["user"]["user_id"]
+
+
+def test_client_supplied_validated_claim_is_reset_when_version_is_saved(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    history_path = tmp_path / "history"
+    settings = get_settings().model_copy(
+        update={"database_path": history_path / instruction_history.HISTORY_DATABASE_FILENAME}
+    )
+    monkeypatch.setattr(instruction_history, "INSTRUCTION_HISTORY_DIR", history_path)
+    monkeypatch.setattr("app.api.history.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.instructions.get_settings", lambda: settings)
+    client = TestClient(app)
+    generated = client.post(
+        "/api/instructions/generate",
+        json={"task": "Проверить рабочее место перед запуском оборудования"},
+    ).json()
+    forged = generated["instruction"]["evidence_claims"][0]
+    forged["provenance"] = "validated_local"
+    forged["validation_status"] = "validated"
+    forged["requires_local_verification"] = False
+    forged["validation_record"] = {
+        "validation_id": "f" * 32,
+        "claim_id": forged["claim_id"],
+        "evidence_reference": "Client supplied label",
+        "evidence_sha256": "b" * 64,
+        "reviewer_user_id": "forged-reviewer",
+        "reviewer_name": "Forged Reviewer",
+        "reviewer_role": "admin",
+        "comment": "This record was supplied by the client and is not trusted.",
+        "validated_at": "2026-07-15T00:00:00Z",
+    }
+
+    saved = client.post("/api/instructions/history", json={"payload": generated}).json()["record"]
+    detail = client.get(
+        f"/api/instructions/history/{saved['instruction_id']}/versions/{saved['version']}"
+    ).json()
+    persisted = detail["payload"]["instruction"]["evidence_claims"][0]
+
+    assert persisted["provenance"] != "validated_local"
+    assert persisted["validation_status"] == "unverified"
+    assert persisted["requires_local_verification"] is True
+    assert persisted["validation_record"] is None
+
+
+def test_operator_cannot_validate_evidence_claim(tmp_path, monkeypatch) -> None:
+    history_path = tmp_path / "history"
+    settings = get_settings().model_copy(
+        update={"database_path": history_path / instruction_history.HISTORY_DATABASE_FILENAME}
+    )
+    monkeypatch.setattr(instruction_history, "INSTRUCTION_HISTORY_DIR", history_path)
+    monkeypatch.setattr("app.api.history.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.instructions.get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    client = TestClient(app)
+    auth = client.post(
+        "/api/auth/register",
+        json={
+            "email": "claim-operator@example.com",
+            "full_name": "Оператор Claims",
+            "password": "strong-password-1",
+            "role": "operator",
+        },
+    ).json()
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    generated = client.post(
+        "/api/instructions/generate",
+        headers=headers,
+        json={"task": "Проверить рабочее место перед запуском оборудования"},
+    ).json()
+    saved = client.post(
+        "/api/instructions/history",
+        headers=headers,
+        json={"payload": generated},
+    ).json()["record"]
+    claim_id = generated["instruction"]["evidence_claims"][0]["claim_id"]
+
+    response = client.post(
+        f"/api/instructions/history/{saved['instruction_id']}/versions/{saved['version']}"
+        f"/claims/{claim_id}/validate",
+        headers=headers,
+        json={
+            "evidence_reference": "Unapproved operator note",
+            "evidence_sha256": "c" * 64,
+            "comment": "Operator must not be able to validate this claim.",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "workflow:approve" in response.json()["error"]["message"]
+
+
+def test_unauthenticated_demo_cannot_validate_evidence_claim(tmp_path, monkeypatch) -> None:
+    history_path = tmp_path / "history"
+    settings = get_settings().model_copy(
+        update={"database_path": history_path / instruction_history.HISTORY_DATABASE_FILENAME}
+    )
+    monkeypatch.setattr(instruction_history, "INSTRUCTION_HISTORY_DIR", history_path)
+    monkeypatch.setattr("app.api.history.get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.instructions.get_settings", lambda: settings)
+    client = TestClient(app)
+    generated = client.post(
+        "/api/instructions/generate",
+        json={"task": "Проверить рабочее место перед запуском оборудования"},
+    ).json()
+    saved = client.post("/api/instructions/history", json={"payload": generated}).json()["record"]
+    claim_id = generated["instruction"]["evidence_claims"][0]["claim_id"]
+
+    response = client.post(
+        f"/api/instructions/history/{saved['instruction_id']}/versions/{saved['version']}"
+        f"/claims/{claim_id}/validate",
+        json={
+            "evidence_reference": "Unauthenticated evidence",
+            "evidence_sha256": "e" * 64,
+            "comment": "Unauthenticated validation must not be accepted.",
+        },
+    )
+
+    assert response.status_code == 401
+    assert "Authenticated reviewer session" in response.json()["error"]["message"]
+
+
 def test_production_history_is_isolated_between_organizations(tmp_path, monkeypatch) -> None:
     history_path = tmp_path / "history"
     database_path = history_path / instruction_history.HISTORY_DATABASE_FILENAME
@@ -649,6 +854,17 @@ def test_production_history_is_isolated_between_organizations(tmp_path, monkeypa
         },
     )
     assert cross_workflow.status_code == 404
+    claim_id = generated["instruction"]["evidence_claims"][0]["claim_id"]
+    cross_validation = client.post(
+        resource_a + f"/claims/{claim_id}/validate",
+        headers=headers_b,
+        json={
+            "evidence_reference": "Cross-tenant evidence",
+            "evidence_sha256": "d" * 64,
+            "comment": "Cross-organization validation must be rejected.",
+        },
+    )
+    assert cross_validation.status_code == 404
 
     steps = [
         {"label": f"{step['number']}. {step['action']}", "completed": True}

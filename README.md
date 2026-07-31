@@ -20,6 +20,12 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+For queued video processing, start the durable worker in a second terminal:
+
+```bash
+make video-worker
+```
+
 Then open `http://127.0.0.1:8000/` and use a narrow manufacturing scenario.
 The default configuration is deterministic, so the demo can run without an
 OpenAI API key.
@@ -42,7 +48,8 @@ Industrial instructions are often prepared manually by technologists, engineers,
 Procedra explores a practical AI workflow for this problem:
 
 - generate a structured instruction draft from a narrow operational request;
-- keep exact machine settings, tolerances, permits, and responsible roles out of the AI output unless they are confirmed;
+- keep exact machine settings, tolerances, permits, and responsible roles
+  unverified unless application-level provenance marks them as `validated_local`;
 - expose source context, local verification items, and expert-review questions;
 - require human review before any real-world use;
 - preserve versions, decisions, execution evidence, and audit events.
@@ -59,11 +66,14 @@ Procedra explores a practical AI workflow for this problem:
 - Hybrid semantic/keyword retrieval over local and uploaded documents.
 - Enterprise document upload and indexing for `.txt`, `.md`, and text-based `.pdf`.
 - Curated public-source retrieval with authority/source metadata and influence scoring.
-- Local and URL video processing with metadata, subtitles/transcripts where available, keyframes, semantic stages, optional frame-level vision analysis, and deterministic fallback.
+- Durable local/URL video jobs with persisted status, lease recovery, bounded
+  retry, hard stage time budgets and cancellation, metadata/subtitles,
+  keyframes, semantic stages, optional frame-level vision analysis, and
+  deterministic fallback.
 - SQLite-backed accounts, organizations, projects, sessions, roles, invitations, and admin audit.
 - Instruction history, reviewer workflow, execution checklist runs, and summary metrics.
 - Stable API error envelopes, request IDs, security headers, optional API token protection, rate limiting, readiness, metrics, and structured redacted JSON logs.
-- Docker Compose local demo with persistent named volumes.
+- Docker Compose local demo with API, a dedicated video worker, and persistent named volumes.
 
 ## Screenshots
 
@@ -159,14 +169,16 @@ Never commit `.env.local`, generated databases, uploads, or runtime artifacts.
 docker compose up --build
 ```
 
-Compose binds to `http://127.0.0.1:8000/` by default and stores generated/uploaded runtime data in named volumes.
+Compose binds to `http://127.0.0.1:8000/` by default, starts the API and video
+worker, and stores generated/uploaded runtime data in named volumes.
 
 Smoke checks:
 
 ```bash
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/ready
-curl http://127.0.0.1:8000/metrics
+curl -H "Authorization: Bearer ${API_ACCESS_TOKEN}" http://127.0.0.1:8000/ready/details
+curl -H "Authorization: Bearer ${API_ACCESS_TOKEN}" http://127.0.0.1:8000/metrics
 ```
 
 ## Verification commands
@@ -179,11 +191,16 @@ make test
 make pip-check
 make docker-config
 make smoke
+make safety-eval
 make demo-eval
 make partner-demo-pack
 ```
 
-The latest local verification before this publication-prep baseline recorded 318 passing tests plus Ruff, strict mypy, compileall, dependency integrity, Compose/API smoke, demo evaluation, and partner-demo-pack generation. Detailed local audit artifacts are kept in the non-published `reports/` workspace folder.
+The latest local verification on 2026-07-16 recorded 376 passing tests (3
+platform-dependent skips) plus Ruff, mypy, compileall, dependency integrity,
+Compose/API smoke, and safety evaluation. Detailed local audit artifacts are
+kept in the non-published `reports/` workspace folder; demo evaluation and
+partner-demo-pack are separate extended gates.
 
 ## Demo evaluation
 

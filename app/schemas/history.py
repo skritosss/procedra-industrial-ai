@@ -3,12 +3,22 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.instruction import InstructionLifecycleStatus, InstructionResponse, RiskLevel
+from app.schemas.instruction import (
+    EvidenceClaim,
+    InstructionLifecycleStatus,
+    InstructionResponse,
+    RiskLevel,
+)
 
 
 ReviewerRole = Literal["master", "technologist", "safety", "quality", "admin"]
 GenerationMode = Literal["openai", "fallback"]
-AuditEventType = Literal["version_saved", "workflow_updated", "execution_saved"]
+AuditEventType = Literal[
+    "version_saved",
+    "workflow_updated",
+    "claim_validated",
+    "execution_saved",
+]
 ReviewText = Annotated[str, Field(min_length=1, max_length=500)]
 
 
@@ -79,6 +89,17 @@ class UpdateInstructionWorkflowRequest(BaseModel):
 
 class UpdateInstructionWorkflowResponse(BaseModel):
     record: InstructionHistoryRecord
+    message: str
+
+
+class ValidateInstructionClaimRequest(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=500)
+    evidence_sha256: str = Field(..., pattern=r"^[a-f0-9]{64}$")
+    comment: str = Field(..., min_length=5, max_length=1000)
+
+
+class ValidateInstructionClaimResponse(BaseModel):
+    claim: EvidenceClaim
     message: str
 
 

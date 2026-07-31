@@ -128,7 +128,9 @@ def _observed_fact_items(request: InstructionRequest) -> list[str]:
     if request.operation_name:
         facts.append(f"Название операции указано во входных данных: {request.operation_name}.")
     if request.technical_context:
-        facts.append("Технический контекст был предоставлен и должен использоваться только в пределах подтвержденных формулировок.")
+        facts.append(
+            "Технический контекст был предоставлен как непроверенный источник и требует локального подтверждения."
+        )
     return facts
 
 

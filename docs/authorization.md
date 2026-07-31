@@ -12,11 +12,15 @@ API returns `404` unless the active user is a member of that project. Resource
 lookups also return `404` when the resource belongs to another project or
 organization, preventing identifier enumeration.
 
-Schema version 7 also enforces these boundaries in SQLite. Membership rows must
+Schema version 10 retains the composite tenant boundaries introduced in version
+7, the admin audit hash chain introduced in version 8, session idle tracking
+from version 9, and adds tenant/project foreign keys for durable video jobs. The
+hash chain ensures that
+database verification detects out-of-band changes. Membership rows must
 reference a project and user from the same organization; resource ownership
 must reference a project and, when present, an owner from that organization.
 The controlled table rebuild validates legacy rows before changing the schema
-and is fully transactional, so failed migrations leave the version 6 tables and
+and is fully transactional, so failed migrations leave the previous schema and
 data intact.
 
 Document listing never creates storage directories or ownership rows. It shows
@@ -38,6 +42,7 @@ one transaction only with `--apply`.
 | Upload enterprise documents | No | Yes | Yes | Yes | Yes | Yes |
 | Review or reject workflow state | No | Yes | Yes | Yes | Yes | Yes |
 | Final approval | No | No | Yes | Yes | Yes | Yes |
+| Validate a versioned evidence claim | No | No | Yes | Yes | Yes | Yes |
 | Project administration | No | No | No | No | No | Yes |
 
 Ownership never overrides role restrictions: an operator who created a resource
@@ -48,6 +53,16 @@ Production requests require an authenticated user session. A static bootstrap
 token alone cannot read or mutate organization/project resources. Demo mode
 retains unauthenticated access only to the explicit `legacy` organization and
 its default project.
+
+Claim validation is stricter than ordinary generation or review. A technologist,
+safety, quality, or admin session must call the version-scoped validation
+endpoint with a stable `claim_id`, controlled evidence reference, evidence
+SHA-256, and comment. Reviewer identity and role come only from the authenticated
+session. Client-supplied `validated_local` records are reset when a new version
+is saved, model-inferred claims cannot be promoted, cross-tenant identifiers
+return `404`, and the successful decision is appended to the instruction's
+hash-chained audit trail. Claim validation does not approve the instruction;
+workflow status remains `ai_draft` until a separate authorized workflow action.
 
 ## Browser and API session transport
 
@@ -69,6 +84,11 @@ Non-browser integrations remain backward compatible: auth endpoints without
 `X-Auth-Transport: cookie` return a bearer token, and explicit bearer requests
 do not require CSRF. When both transports are supplied, explicit bearer auth
 takes precedence.
+
+Sessions have both an absolute lifetime and an idle timeout. Successful
+authentication refreshes `last_seen_at`; inactive sessions fail closed, and old
+expired/revoked rows are removed after the configured retention window during
+session creation or an explicit maintenance call. Raw tokens are never stored.
 
 ## Administrative lifecycle
 

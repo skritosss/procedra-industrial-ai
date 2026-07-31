@@ -2,7 +2,7 @@ import html
 import json
 import re
 import socket
-from typing import Any, cast
+from typing import Any, BinaryIO, cast
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,16 +60,55 @@ def save_uploaded_video(
     return video_id, video_path
 
 
+def save_uploaded_video_stream(
+    filename: str,
+    stream: BinaryIO,
+    *,
+    max_bytes: int,
+    organization_id: str = LEGACY_ORGANIZATION_ID,
+    chunk_bytes: int = 1024 * 1024,
+) -> tuple[str, Path]:
+    if max_bytes <= 0 or chunk_bytes <= 0:
+        raise ValueError("Upload limits must be positive")
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_VIDEO_EXTENSIONS:
+        raise ValueError("Unsupported video format")
+    video_id = uuid.uuid4().hex
+    upload_dir = organization_storage_path(UPLOAD_DIR, organization_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    video_path = upload_dir / f"{video_id}{suffix}"
+    partial_path = upload_dir / f".{video_id}{suffix}.part"
+    total = 0
+    try:
+        with partial_path.open("xb") as destination:
+            while chunk := stream.read(chunk_bytes):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError(
+                        f"Video file is too large. Maximum size is {max_bytes // (1024 * 1024)} MB"
+                    )
+                destination.write(chunk)
+        if total == 0:
+            raise ValueError("Uploaded video is empty")
+        partial_path.replace(video_path)
+    except Exception:
+        partial_path.unlink(missing_ok=True)
+        video_path.unlink(missing_ok=True)
+        raise
+    return video_id, video_path
+
+
 def download_video_from_url(
     video_url: str,
     visual_quality: int | str = 720,
     organization_id: str = LEGACY_ORGANIZATION_ID,
+    video_id: str | None = None,
 ) -> tuple[str, Path, dict[str, str]]:
     target_height = _normalize_visual_quality(visual_quality)
     policy = _video_egress_policy()
     policy.resolve(video_url)
     metadata = fetch_video_metadata(video_url, policy=policy)
-    video_id = uuid.uuid4().hex
+    video_id = video_id or uuid.uuid4().hex
     upload_dir = organization_storage_path(UPLOAD_DIR, organization_id)
     output_template = str(upload_dir / f"{video_id}.%(ext)s")
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -155,6 +194,10 @@ def _remove_download_candidates(video_id: str, organization_id: str = LEGACY_ORG
     for path in upload_dir.glob(f"{video_id}.*"):
         if path.is_file() or path.is_symlink():
             path.unlink(missing_ok=True)
+
+
+def remove_video_download_candidates(video_id: str, organization_id: str = LEGACY_ORGANIZATION_ID) -> None:
+    _remove_download_candidates(video_id, organization_id)
 
 
 def _validate_public_video_url(video_url: str) -> None:

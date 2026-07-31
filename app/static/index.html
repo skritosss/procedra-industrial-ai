@@ -145,14 +145,24 @@
 
             <button class="primary-action" type="submit" data-i18n="generateButton"></button>
           </form>
-          <div class="video-panel">
+          <div class="video-panel" aria-labelledby="video-tools-title">
+            <div class="tool-section-header">
+              <h3 id="video-tools-title" data-i18n="videoToolsTitle"></h3>
+              <p data-i18n="videoToolsDescription"></p>
+            </div>
             <div class="field">
               <label for="video_url" data-i18n="videoUrlLabel"></label>
               <input id="video_url" type="url" />
             </div>
             <div class="field">
               <label for="video_file" data-i18n="videoFileLabel"></label>
-              <input id="video_file" type="file" accept="video/*" />
+              <div class="file-picker">
+                <input class="file-picker-input" id="video_file" type="file" accept="video/*" aria-describedby="video-file-name" />
+                <label class="file-picker-display" for="video_file">
+                  <span class="file-picker-action" data-i18n="chooseFile"></span>
+                  <span class="file-picker-name" id="video-file-name" data-i18n="noFileSelected"></span>
+                </label>
+              </div>
             </div>
             <div class="field">
               <label for="max_keyframes" data-i18n="maxKeyframesLabel"></label>
@@ -174,12 +184,27 @@
             </div>
             <button class="secondary-action" id="video-button" type="button" data-i18n="extractVideoButton"></button>
             <button class="secondary-action" id="video-generate-button" type="button" data-i18n="generateFromVideoButton"></button>
+            <div class="video-job-progress" id="video-job-progress" aria-live="polite" hidden>
+              <label for="video-job-progress-bar" id="video-job-progress-label" data-i18n="videoStatusLoading"></label>
+              <progress id="video-job-progress-bar" max="100" value="0">0%</progress>
+              <button class="secondary-action" id="video-cancel-button" type="button" data-i18n="cancelVideoJob"></button>
+            </div>
           </div>
 
-          <div class="document-panel">
+          <div class="document-panel" aria-labelledby="document-tools-title">
+            <div class="tool-section-header">
+              <h3 id="document-tools-title" data-i18n="documentToolsTitle"></h3>
+              <p data-i18n="documentToolsDescription"></p>
+            </div>
             <div class="field">
               <label for="document_file" data-i18n="documentFileLabel"></label>
-              <input id="document_file" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" />
+              <div class="file-picker">
+                <input class="file-picker-input" id="document_file" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" aria-describedby="document-file-name" />
+                <label class="file-picker-display" for="document_file">
+                  <span class="file-picker-action" data-i18n="chooseFile"></span>
+                  <span class="file-picker-name" id="document-file-name" data-i18n="noFileSelected"></span>
+                </label>
+              </div>
             </div>
             <button class="secondary-action" id="document-button" type="button" data-i18n="uploadDocumentButton"></button>
             <div id="document-list" class="document-list" aria-live="polite"></div>

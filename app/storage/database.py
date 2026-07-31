@@ -14,7 +14,7 @@ from typing import Callable, Literal
 from app.core.settings import get_settings
 
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 10
 LEGACY_ORGANIZATION_ID = "legacy"
 LEGACY_ORGANIZATION_NAME = "Legacy Demo Organization"
 Migration = tuple[int, str, Callable[[sqlite3.Connection, int], None]]
@@ -94,10 +94,23 @@ def database_is_healthy(database_path: Path | None = None) -> bool:
             if not integrity or str(integrity[0]).lower() != "ok":
                 return False
             _verify_audit_event_chains(connection)
+            _verify_admin_audit_event_chains(connection)
             _verify_authorization_integrity(connection)
             return True
     except (OSError, sqlite3.Error, ValueError):
         return False
+
+
+def database_is_read_only_ready(database_path: Path | None = None) -> bool:
+    """Verify an already initialized database without creating or migrating it."""
+    path = (database_path or get_settings().database_path).resolve()
+    if not path.is_file():
+        return False
+    try:
+        result = verify_database(path)
+    except (OSError, ValueError):
+        return False
+    return result["schema_version"] == CURRENT_SCHEMA_VERSION
 
 
 def backup_database(source_path: Path, backup_path: Path) -> Path:
@@ -178,7 +191,9 @@ def verify_database(database_path: Path) -> dict[str, int | str]:
             resource_count = _table_count(connection, "resource_ownership")
             admin_audit_count = _table_count(connection, "admin_audit_events")
             rate_limit_event_count = _table_count(connection, "rate_limit_events")
+            video_job_count = _table_count(connection, "video_jobs")
             _verify_audit_event_chains(connection)
+            _verify_admin_audit_event_chains(connection)
             _verify_authorization_integrity(connection)
     except sqlite3.Error as exc:
         raise ValueError(f"Unable to verify database: {exc}") from exc
@@ -192,7 +207,9 @@ def verify_database(database_path: Path) -> dict[str, int | str]:
         "resource_ownership": resource_count,
         "admin_audit_events": admin_audit_count,
         "rate_limit_events": rate_limit_event_count,
+        "video_jobs": video_job_count,
         "audit_chain": "ok",
+        "admin_audit_chain": "ok",
         "authorization_integrity": "ok",
     }
 
@@ -217,6 +234,35 @@ def audit_event_hash(
 ) -> str:
     material = "\x1f".join(
         [organization_id, instruction_id, str(version), str(sequence), previous_event_hash, event_json]
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def admin_audit_event_hash(
+    organization_id: str,
+    sequence: int,
+    previous_event_hash: str,
+    event_id: str,
+    actor_user_id: str,
+    action: str,
+    target_type: str,
+    target_id: str,
+    details_json: str,
+    created_at: str,
+) -> str:
+    material = "\x1f".join(
+        [
+            organization_id,
+            str(sequence),
+            previous_event_hash,
+            event_id,
+            actor_user_id,
+            action,
+            target_type,
+            target_id,
+            details_json,
+            created_at,
+        ]
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -247,6 +293,47 @@ def _verify_audit_event_chains(connection: sqlite3.Connection) -> None:
         if not hmac.compare_digest(computed, str(row[5])):
             raise ValueError("Audit event chain hash is invalid")
         parents[parent] = (sequence + 1, computed)
+
+
+def _verify_admin_audit_event_chains(connection: sqlite3.Connection) -> None:
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(admin_audit_events)").fetchall()
+    }
+    if not {"sequence", "previous_event_hash", "event_hash"} <= columns:
+        return
+    rows = connection.execute(
+        """
+        SELECT organization_id, sequence, previous_event_hash, event_hash,
+               event_id, actor_user_id, action, target_type, target_id,
+               details_json, created_at
+        FROM admin_audit_events
+        ORDER BY organization_id, sequence
+        """
+    ).fetchall()
+    parents: dict[str, tuple[int, str]] = {}
+    for row in rows:
+        organization_id = str(row["organization_id"])
+        sequence = int(row["sequence"])
+        previous = str(row["previous_event_hash"])
+        expected_sequence, expected_previous = parents.get(organization_id, (1, ""))
+        if sequence != expected_sequence or previous != expected_previous:
+            raise ValueError("Admin audit event chain sequence is invalid")
+        computed = admin_audit_event_hash(
+            organization_id,
+            sequence,
+            previous,
+            str(row["event_id"]),
+            str(row["actor_user_id"]),
+            str(row["action"]),
+            str(row["target_type"]),
+            str(row["target_id"]),
+            str(row["details_json"]),
+            str(row["created_at"]),
+        )
+        if not hmac.compare_digest(computed, str(row["event_hash"])):
+            raise ValueError("Admin audit event chain hash is invalid")
+        parents[organization_id] = (sequence + 1, computed)
 
 
 def _verify_authorization_integrity(connection: sqlite3.Connection) -> None:
@@ -719,10 +806,148 @@ def _migration_shared_rate_limit(connection: sqlite3.Connection, _: int) -> None
     )
 
 
+def _migration_admin_audit_hash_chain(connection: sqlite3.Connection, _: int) -> None:
+    connection.execute("DROP TRIGGER IF EXISTS admin_audit_events_no_update")
+    connection.execute("DROP TRIGGER IF EXISTS admin_audit_events_no_delete")
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(admin_audit_events)").fetchall()
+    }
+    if "sequence" not in columns:
+        connection.execute("ALTER TABLE admin_audit_events ADD COLUMN sequence INTEGER")
+    if "previous_event_hash" not in columns:
+        connection.execute("ALTER TABLE admin_audit_events ADD COLUMN previous_event_hash TEXT")
+    if "event_hash" not in columns:
+        connection.execute("ALTER TABLE admin_audit_events ADD COLUMN event_hash TEXT")
+
+    rows = connection.execute(
+        """
+        SELECT event_id, organization_id, actor_user_id, action,
+               target_type, target_id, details_json, created_at
+        FROM admin_audit_events
+        ORDER BY organization_id, created_at, event_id
+        """
+    ).fetchall()
+    chain_heads: dict[str, tuple[int, str]] = {}
+    for row in rows:
+        organization_id = str(row["organization_id"])
+        sequence, previous = chain_heads.get(organization_id, (1, ""))
+        event_hash = admin_audit_event_hash(
+            organization_id,
+            sequence,
+            previous,
+            str(row["event_id"]),
+            str(row["actor_user_id"]),
+            str(row["action"]),
+            str(row["target_type"]),
+            str(row["target_id"]),
+            str(row["details_json"]),
+            str(row["created_at"]),
+        )
+        connection.execute(
+            """
+            UPDATE admin_audit_events
+            SET sequence = ?, previous_event_hash = ?, event_hash = ?
+            WHERE event_id = ?
+            """,
+            (sequence, previous, event_hash, str(row["event_id"])),
+        )
+        chain_heads[organization_id] = (sequence + 1, event_hash)
+
+    connection.execute(
+        "CREATE UNIQUE INDEX idx_admin_audit_org_sequence "
+        "ON admin_audit_events (organization_id, sequence)"
+    )
+    connection.execute(
+        "CREATE UNIQUE INDEX idx_admin_audit_event_hash ON admin_audit_events (event_hash)"
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER admin_audit_events_no_update
+        BEFORE UPDATE ON admin_audit_events
+        BEGIN
+            SELECT RAISE(ABORT, 'admin audit events are append-only');
+        END
+        """
+    )
+    connection.execute(
+        """
+        CREATE TRIGGER admin_audit_events_no_delete
+        BEFORE DELETE ON admin_audit_events
+        BEGIN
+            SELECT RAISE(ABORT, 'admin audit events are append-only');
+        END
+        """
+    )
+
+
 def _migration_browser_session_csrf(connection: sqlite3.Connection, _: int) -> None:
     columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(auth_sessions)").fetchall()}
     if "csrf_token_hash" not in columns:
         connection.execute("ALTER TABLE auth_sessions ADD COLUMN csrf_token_hash TEXT")
+
+
+def _migration_session_idle_tracking(connection: sqlite3.Connection, _: int) -> None:
+    columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(auth_sessions)").fetchall()}
+    if "last_seen_at" not in columns:
+        connection.execute("ALTER TABLE auth_sessions ADD COLUMN last_seen_at TEXT")
+    connection.execute("UPDATE auth_sessions SET last_seen_at = created_at WHERE last_seen_at IS NULL")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_last_seen ON auth_sessions(last_seen_at)")
+
+
+def _migration_durable_video_jobs(connection: sqlite3.Connection, _: int) -> None:
+    connection.execute(
+        """
+        CREATE TABLE video_jobs (
+            job_id TEXT PRIMARY KEY,
+            organization_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            owner_user_id TEXT,
+            job_type TEXT NOT NULL CHECK (job_type = 'extract_keyframes'),
+            source_kind TEXT NOT NULL CHECK (source_kind IN ('upload', 'url')),
+            status TEXT NOT NULL CHECK (
+                status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')
+            ),
+            stage TEXT NOT NULL,
+            progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (
+                progress_percent >= 0 AND progress_percent <= 100
+            ),
+            request_json TEXT NOT NULL,
+            result_json TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            idempotency_key TEXT NOT NULL,
+            video_id TEXT,
+            artifact_path TEXT,
+            attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+            max_attempts INTEGER NOT NULL DEFAULT 3 CHECK (max_attempts BETWEEN 1 AND 10),
+            available_at TEXT NOT NULL,
+            lease_owner TEXT,
+            lease_expires_at TEXT,
+            heartbeat_at TEXT,
+            cancel_requested_at TEXT,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            updated_at TEXT NOT NULL,
+            UNIQUE (organization_id, project_id, idempotency_key),
+            FOREIGN KEY (organization_id, project_id)
+                REFERENCES projects(organization_id, project_id) ON DELETE CASCADE,
+            FOREIGN KEY (organization_id, owner_user_id)
+                REFERENCES users(organization_id, user_id) ON DELETE RESTRICT
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX idx_video_jobs_claim ON video_jobs(status, available_at, created_at)"
+    )
+    connection.execute(
+        "CREATE INDEX idx_video_jobs_lease ON video_jobs(status, lease_expires_at)"
+    )
+    connection.execute(
+        "CREATE INDEX idx_video_jobs_scope "
+        "ON video_jobs(organization_id, project_id, created_at DESC)"
+    )
 
 
 def _migration_composite_tenant_foreign_keys(connection: sqlite3.Connection, _: int) -> None:
@@ -829,6 +1054,11 @@ def _verify_composite_tenant_foreign_keys(connection: sqlite3.Connection) -> Non
             ("users", ("organization_id", "owner_user_id"), ("organization_id", "user_id")),
         },
     }
+    if current_schema_version(connection) >= 10:
+        required["video_jobs"] = {
+            ("projects", ("organization_id", "project_id"), ("organization_id", "project_id")),
+            ("users", ("organization_id", "owner_user_id"), ("organization_id", "user_id")),
+        }
     for table, expected in required.items():
         if not expected <= _foreign_key_signatures(connection, table):
             raise ValueError("Composite tenant foreign-key schema verification failed")
@@ -862,4 +1092,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (5, "shared_rate_limit", _migration_shared_rate_limit),
     (6, "browser_session_csrf", _migration_browser_session_csrf),
     (7, "composite_tenant_foreign_keys", _migration_composite_tenant_foreign_keys),
+    (8, "admin_audit_hash_chain", _migration_admin_audit_hash_chain),
+    (9, "session_idle_tracking", _migration_session_idle_tracking),
+    (10, "durable_video_jobs", _migration_durable_video_jobs),
 )
