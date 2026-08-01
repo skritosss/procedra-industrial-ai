@@ -69,11 +69,29 @@ jobs:
       - name: Build image
         run: docker build -t industrial-instruction-ai:ci .
 
+      - name: Refuse to start without configuration
+        run: |
+          set -euo pipefail
+          # The image defaults to production, so an unconfigured container must
+          # fail closed instead of coming up open to the internet. This asserts
+          # the security property directly rather than trusting the default.
+          if docker run --rm --name procedra-ci-unconfigured industrial-instruction-ai:ci; then
+            echo "Container started without configuration; it must refuse to." >&2
+            exit 1
+          fi
+
       - name: Run container smoke and restart check
         run: |
           set -euo pipefail
           trap 'docker rm -f procedra-ci >/dev/null 2>&1 || true' EXIT
-          docker run -d --name procedra-ci -p 127.0.0.1:18000:8000 industrial-instruction-ai:ci
+          docker run -d --name procedra-ci -p 127.0.0.1:18000:8000 \
+            -e DEPLOYMENT_MODE=production \
+            -e API_ACCESS_TOKEN=ci-production-bootstrap-token-at-least-32-chars \
+            -e AUTH_PUBLIC_REGISTRATION_ENABLED=false \
+            -e AUTH_ALLOW_ROLE_SELF_ASSIGNMENT=false \
+            -e AUTH_MIN_PASSWORD_LENGTH=12 \
+            -e VIDEO_ALLOWED_HOSTS=youtube.com \
+            industrial-instruction-ai:ci
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18000/ready >/dev/null; then break; fi
             if [ "$attempt" -eq 30 ]; then docker logs procedra-ci; exit 1; fi
@@ -81,6 +99,13 @@ jobs:
           done
           test "$(docker exec procedra-ci id -u)" != "0"
           curl -fsS http://127.0.0.1:18000/health
+          # The internal documents must not reach a customer-delivered image.
+          if docker exec procedra-ci test -e docs; then
+            echo "docs/ is present in the image" >&2
+            exit 1
+          fi
+          curl -fsS -D - -o /dev/null http://127.0.0.1:18000/health \
+            | grep -qi "^strict-transport-security: max-age=31536000"
           docker restart procedra-ci >/dev/null
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18000/ready >/dev/null; then break; fi
