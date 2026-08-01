@@ -34,6 +34,28 @@ REQUIRED_GITIGNORE_ENTRIES = (
     "docs/article_review_and_roadmap.md",
     "docs/research/*",
 )
+REQUIRED_DOCKERIGNORE_ENTRIES = (
+    ".env",
+    ".env.*",
+    "!.env.example",
+    ".DS_Store",
+    "generated/",
+    "uploads/",
+    "outputs/",
+    "output/",
+    "tmp/",
+    "reports/",
+    "PROJECT_HANDOFF.md",
+    "PRODUCT_ROADMAP.md",
+    "AUDIT_2026-07-29.md",
+    "_internal/",
+    "_to_delete/",
+    "docs/Предметная_часть_пилотного_хоздоговора_Procedra.md",
+    "docs/ssrn_status_and_outreach_2026-07-29.md",
+    "docs/ARTICLE_CHAT.md",
+    "docs/article_review_and_roadmap.md",
+    "docs/research/",
+)
 RESEARCH_ROOT = "docs/research/"
 RESEARCH_PUBLIC_ALLOWLIST = (
     "docs/research/README.md",
@@ -85,6 +107,7 @@ class ArtifactSummary:
 class PublicScopeAudit:
     ok: bool
     gitignore_missing_entries: list[str]
+    dockerignore_missing_entries: list[str]
     tracked_private_paths: list[str]
     dry_run_private_paths: list[str]
     dry_run_paths: list[str]
@@ -100,8 +123,12 @@ def main() -> None:
 
 
 def audit_public_scope(*, project_root: Path, sample_limit: int = 0) -> PublicScopeAudit:
-    gitignore_entries = _gitignore_entries(project_root)
+    gitignore_entries = _ignore_entries(project_root / ".gitignore")
     gitignore_missing_entries = [entry for entry in REQUIRED_GITIGNORE_ENTRIES if entry not in gitignore_entries]
+    dockerignore_entries = _ignore_entries(project_root / ".dockerignore")
+    dockerignore_missing_entries = [
+        entry for entry in REQUIRED_DOCKERIGNORE_ENTRIES if entry not in dockerignore_entries
+    ]
     tracked_paths = _git_paths(project_root, ("ls-files", "-z"))
     dry_run_paths = _git_add_dry_run_paths(project_root)
     tracked_private_paths = [path for path in tracked_paths if _is_private_path(path)]
@@ -111,8 +138,12 @@ def audit_public_scope(*, project_root: Path, sample_limit: int = 0) -> PublicSc
         for root in IGNORED_ARTIFACT_ROOTS
     ]
     return PublicScopeAudit(
-        ok=not gitignore_missing_entries and not tracked_private_paths and not dry_run_private_paths,
+        ok=not gitignore_missing_entries
+        and not dockerignore_missing_entries
+        and not tracked_private_paths
+        and not dry_run_private_paths,
         gitignore_missing_entries=gitignore_missing_entries,
+        dockerignore_missing_entries=dockerignore_missing_entries,
         tracked_private_paths=tracked_private_paths,
         dry_run_private_paths=dry_run_private_paths,
         dry_run_paths=dry_run_paths,
@@ -153,13 +184,19 @@ def _parse_args() -> argparse.Namespace:
     return args
 
 
-def _gitignore_entries(project_root: Path) -> set[str]:
-    gitignore = project_root / ".gitignore"
-    if not gitignore.is_file():
+def _ignore_entries(path: Path) -> set[str]:
+    """Read the meaningful lines of a .gitignore-style file.
+
+    Both boundaries matter and they are not the same. `.gitignore` decides what
+    reaches the public repository; `.dockerignore` decides what reaches the image
+    a customer receives. The audit used to watch only the first, which is why
+    `COPY docs ./docs` shipped the contract draft without anything objecting.
+    """
+    if not path.is_file():
         return set()
     return {
         line.strip()
-        for line in gitignore.read_text(encoding="utf-8").splitlines()
+        for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
     }
 

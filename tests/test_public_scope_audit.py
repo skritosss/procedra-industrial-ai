@@ -27,6 +27,9 @@ def test_public_scope_audit_summarizes_ignored_artifacts(tmp_path) -> None:
 
 def test_public_scope_audit_suppresses_private_filename_samples_by_default(tmp_path, monkeypatch) -> None:
     (tmp_path / ".gitignore").write_text("\n".join(audit.REQUIRED_GITIGNORE_ENTRIES), encoding="utf-8")
+    (tmp_path / ".dockerignore").write_text(
+        "\n".join(audit.REQUIRED_DOCKERIGNORE_ENTRIES), encoding="utf-8"
+    )
     generated = tmp_path / "generated"
     generated.mkdir()
     (generated / "customer-process-name.txt").write_text("private", encoding="utf-8")
@@ -43,6 +46,9 @@ def test_public_scope_audit_suppresses_private_filename_samples_by_default(tmp_p
 
 def test_public_scope_audit_fails_when_private_paths_would_be_staged(tmp_path, monkeypatch) -> None:
     (tmp_path / ".gitignore").write_text("\n".join(audit.REQUIRED_GITIGNORE_ENTRIES), encoding="utf-8")
+    (tmp_path / ".dockerignore").write_text(
+        "\n".join(audit.REQUIRED_DOCKERIGNORE_ENTRIES), encoding="utf-8"
+    )
     monkeypatch.setattr(audit, "IGNORED_ARTIFACT_ROOTS", (tmp_path / "generated",))
     monkeypatch.setattr(audit, "_git_paths", lambda _root, _args: ["README.md"])
     monkeypatch.setattr(audit, "_git_add_dry_run_paths", lambda _root: ["reports/private.md"])
@@ -55,6 +61,9 @@ def test_public_scope_audit_fails_when_private_paths_would_be_staged(tmp_path, m
 
 def test_public_scope_audit_passes_with_expected_public_paths(tmp_path, monkeypatch) -> None:
     (tmp_path / ".gitignore").write_text("\n".join(audit.REQUIRED_GITIGNORE_ENTRIES), encoding="utf-8")
+    (tmp_path / ".dockerignore").write_text(
+        "\n".join(audit.REQUIRED_DOCKERIGNORE_ENTRIES), encoding="utf-8"
+    )
     monkeypatch.setattr(audit, "IGNORED_ARTIFACT_ROOTS", (tmp_path / "generated",))
     monkeypatch.setattr(audit, "_git_paths", lambda _root, _args: ["README.md", ".env.example"])
     monkeypatch.setattr(audit, "_git_add_dry_run_paths", lambda _root: ["README.md", "scripts/public_scope_audit.py"])
@@ -77,3 +86,17 @@ def test_public_scope_audit_reports_missing_gitignore_entries(tmp_path, monkeypa
 
     assert result.ok is False
     assert "reports/" in result.gitignore_missing_entries
+
+
+def test_public_scope_audit_reports_missing_dockerignore_entries(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".gitignore").write_text("\n".join(audit.REQUIRED_GITIGNORE_ENTRIES), encoding="utf-8")
+    (tmp_path / ".dockerignore").write_text("generated/\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "IGNORED_ARTIFACT_ROOTS", ())
+    monkeypatch.setattr(audit, "_git_paths", lambda _root, _args: [])
+    monkeypatch.setattr(audit, "_git_add_dry_run_paths", lambda _root: [])
+
+    result = audit.audit_public_scope(project_root=tmp_path)
+
+    assert result.ok is False
+    assert "docs/research/" in result.dockerignore_missing_entries
+    assert result.gitignore_missing_entries == []

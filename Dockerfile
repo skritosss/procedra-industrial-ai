@@ -47,7 +47,6 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 COPY app ./app
-COPY docs ./docs
 COPY examples ./examples
 COPY scripts/cleanup_artifacts.py ./scripts/cleanup_artifacts.py
 COPY scripts/manage_database.py ./scripts/manage_database.py

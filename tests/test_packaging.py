@@ -402,3 +402,20 @@ def test_settings_reject_invalid_timeout_and_image_limits() -> None:
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None, video_max_bytes=3 * 1024 * 1024 * 1024)
+
+
+def test_dockerfile_does_not_ship_the_docs_directory() -> None:
+    dockerfile = _read("Dockerfile")
+
+    # docs/ holds internal commercial and research drafts and is never read at
+    # runtime, so a customer-delivered image must not contain it.
+    assert "COPY docs" not in dockerfile
+
+
+def test_dockerignore_excludes_internal_documents() -> None:
+    dockerignore = _read(".dockerignore").splitlines()
+
+    assert "docs/research/" in dockerignore
+    assert "_internal/" in dockerignore
+    assert "PRODUCT_ROADMAP.md" in dockerignore
+    assert "docs/Предметная_часть_пилотного_хоздоговора_Procedra.md" in dockerignore

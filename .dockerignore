@@ -15,6 +15,10 @@ outputs/
 output/
 tmp/
 PROJECT_HANDOFF.md
+PRODUCT_ROADMAP.md
+AUDIT_2026-07-29.md
+_internal/
+_to_delete/
 reports/
 reports/**/*.log
 reports/**/*.sqlite3
@@ -24,3 +28,12 @@ reports/**/*.pdf
 dist/
 build/
 *.egg-info/
+
+# Internal business and research material. The image no longer copies docs/ at
+# all, but the build context still reaches these files, so a future COPY must
+# not be able to pick them up.
+docs/Предметная_часть_пилотного_хоздоговора_Procedra.md
+docs/ssrn_status_and_outreach_2026-07-29.md
+docs/ARTICLE_CHAT.md
+docs/article_review_and_roadmap.md
+docs/research/
