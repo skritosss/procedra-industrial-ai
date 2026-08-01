@@ -165,7 +165,18 @@ def _score_request_focus(
         "есть явная граница, не расширяющая задачу": any(word in boundary_text for word in ["границ", "не расшир", "конкретн", "только"]),
         "нет признаков ухода в нерелевантную смежную операцию": not _has_scope_drift(source_request, instruction_text.lower()),
     }
-    return _criterion("request_focus", checks)
+    issue_labels = {
+        "большинство шагов связано с задачей": "часть шагов не связана с задачей запроса",
+        "название или назначение отражает запрос": "название и назначение слабо отражают запрос",
+        "текст инструкции сохраняет ключевые термины запроса": (
+            "в тексте инструкции потеряны ключевые термины запроса"
+        ),
+        "есть явная граница, не расширяющая задачу": "нет явной границы задачи",
+        "нет признаков ухода в нерелевантную смежную операцию": (
+            "есть признаки ухода в нерелевантную смежную операцию"
+        ),
+    }
+    return _criterion("request_focus", checks, issue_labels)
 
 
 def _score_safety(instruction: WorkInstruction) -> CriterionScore:
@@ -232,7 +243,18 @@ def _score_source_grounding(
         "нет неразрешенных safety-сигналов во входном контексте": not safety_findings,
         "есть список локальных проверок": len(instruction.local_verification_required) >= 2,
     }
-    return _criterion("source_grounding", checks)
+    issue_labels = {
+        "нет неразрешенных safety-сигналов во входном контексте": (
+            "обнаружены неразрешенные safety-сигналы во входном контексте"
+        ),
+        "непроверенные утверждения не помечены подтвержденными": (
+            "непроверенные утверждения помечены как подтвержденные"
+        ),
+        "нет неподтвержденных точных параметров": (
+            "в тексте есть точные параметры без подтверждения"
+        ),
+    }
+    return _criterion("source_grounding", checks, issue_labels)
 
 
 def _score_domain_risk_control(
@@ -251,7 +273,15 @@ def _score_domain_risk_control(
             finding.severity == "critical" for finding in safety_findings
         ),
     }
-    return _criterion("domain_risk_control", checks)
+    issue_labels = {
+        "нет критических сигналов в непроверенном контексте": (
+            "обнаружен критический сигнал в непроверенном контексте"
+        ),
+        "нет опасных самовольных действий": (
+            "в тексте есть признаки опасных самовольных действий"
+        ),
+    }
+    return _criterion("domain_risk_control", checks, issue_labels)
 
 
 def _score_implementation_readiness(instruction: WorkInstruction) -> CriterionScore:
@@ -270,9 +300,22 @@ def _score_implementation_readiness(instruction: WorkInstruction) -> CriterionSc
     return _criterion("implementation_readiness", checks)
 
 
-def _criterion(name: str, checks: dict[str, bool]) -> CriterionScore:
+def _criterion(
+    name: str,
+    checks: dict[str, bool],
+    issue_labels: dict[str, str] | None = None,
+) -> CriterionScore:
+    """Свести набор проверок в оценку по критерию.
+
+    Ключи `checks` — это формулировки, описывающие пройденную проверку, и они
+    попадают в `strengths`. Часть проверок сформулирована через отрицание
+    ("нет критических сигналов"): для них та же формулировка в списке проблем
+    означала бы ровно противоположное тому, что произошло. Поэтому для таких
+    проверок передаётся `issue_labels` — отдельный текст для случая провала.
+    """
+    overrides = issue_labels or {}
     passed = [label for label, ok in checks.items() if ok]
-    failed = [label for label, ok in checks.items() if not ok]
+    failed = [overrides.get(label, label) for label, ok in checks.items() if not ok]
     score = round(100 * len(passed) / len(checks)) if checks else 0
     return CriterionScore(
         criterion=cast(EvaluationCriterion, name),
