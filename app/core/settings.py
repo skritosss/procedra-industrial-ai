@@ -13,7 +13,11 @@ HOST_LABEL_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 
 class Settings(BaseSettings):
-    deployment_mode: Literal["demo", "production"] = "demo"
+    # Production is the default so that an unsafe deployment requires a
+    # deliberate act. An image started with no environment at all previously
+    # came up in demo mode: no API authentication, public registration, role
+    # self-assignment, no video host allowlist and cookies without Secure.
+    deployment_mode: Literal["demo", "production"] = "production"
     openai_api_key: str | None = None
     openai_enabled: bool = False
     openai_model: str = "gpt-4.1-mini"

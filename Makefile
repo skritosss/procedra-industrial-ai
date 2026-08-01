@@ -6,6 +6,11 @@ PORT ?= 8000
 IMAGE ?= industrial-instruction-ai:local
 CLEANUP_MAX_AGE_HOURS ?= 24
 DATABASE ?= generated/app.sqlite3
+# Targets that boot the application locally state the demo mode explicitly.
+# The default deployment mode is production, so an unconfigured run refuses to
+# start — that is the intent. Declaring the mode here keeps the gate
+# reproducible without depending on an untracked .env file.
+DEMO_ENV ?= DEPLOYMENT_MODE=demo
 BACKUP ?=
 SAFETY_BACKUP ?=
 
@@ -24,13 +29,13 @@ install: venv env
 	$(APP_PYTHON) -m pip install -r requirements.txt
 
 run:
-	$(APP_PYTHON) -m uvicorn app.main:app --host $(HOST) --port $(PORT)
+	$(DEMO_ENV) $(APP_PYTHON) -m uvicorn app.main:app --host $(HOST) --port $(PORT)
 
 video-worker:
-	$(APP_PYTHON) scripts/run_video_job_worker.py
+	$(DEMO_ENV) $(APP_PYTHON) scripts/run_video_job_worker.py
 
 video-job-contention:
-	$(APP_PYTHON) scripts/run_video_job_contention_probe.py
+	$(DEMO_ENV) $(APP_PYTHON) scripts/run_video_job_contention_probe.py
 
 test:
 	$(APP_PYTHON) -m pytest
@@ -60,13 +65,13 @@ safety-eval:
 	$(APP_PYTHON) scripts/run_safety_eval.py
 
 quality-discrimination:
-	$(APP_PYTHON) scripts/run_quality_discrimination.py
+	$(DEMO_ENV) $(APP_PYTHON) scripts/run_quality_discrimination.py
 
 demo-eval:
-	$(APP_PYTHON) scripts/run_demo_eval.py
+	$(DEMO_ENV) $(APP_PYTHON) scripts/run_demo_eval.py
 
 partner-demo-pack:
-	$(APP_PYTHON) scripts/build_partner_demo_pack.py
+	$(DEMO_ENV) $(APP_PYTHON) scripts/build_partner_demo_pack.py
 
 cleanup-plan:
 	$(APP_PYTHON) scripts/cleanup_artifacts.py --max-age-hours $(CLEANUP_MAX_AGE_HOURS) --reconcile-video-ownership
@@ -96,7 +101,7 @@ document-ownership-apply:
 smoke: compile lint typecheck static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination test pip-check docker-config api-smoke
 
 api-smoke:
-	$(APP_PYTHON) -c "from fastapi.testclient import TestClient; from app.main import app; client = TestClient(app); assert client.get('/health').status_code == 200; response = client.post('/api/instructions/generate', json={'task': 'Подготовить рабочее место оператора перед запуском оборудования'}); assert response.status_code == 200"
+	$(DEMO_ENV) $(APP_PYTHON) -c "from fastapi.testclient import TestClient; from app.main import app; client = TestClient(app); assert client.get('/health').status_code == 200; response = client.post('/api/instructions/generate', json={'task': 'Подготовить рабочее место оператора перед запуском оборудования'}); assert response.status_code == 200"
 
 health:
 	curl -fsS http://$(HOST):$(PORT)/health
