@@ -172,6 +172,16 @@ async def add_security_headers(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    if get_settings().deployment_mode == "production":
+        # Production only. Demo mode serves plain HTTP on localhost, and browsers
+        # cache HSTS aggressively, so sending it there would force https on
+        # 127.0.0.1 for a year and break local development well beyond this run.
+        # `preload` is deliberately omitted: leaving that list is difficult and
+        # there is no domain to commit yet.
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
     if request.url.path.startswith(("/api/auth/", "/api/admin/")):
         response.headers.setdefault("Cache-Control", "no-store")
         response.headers.setdefault("Pragma", "no-cache")

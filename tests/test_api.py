@@ -1431,3 +1431,25 @@ def test_retrieve_endpoint_returns_sources() -> None:
 
     assert response.status_code == 200
     assert response.json()
+
+
+def test_hsts_is_sent_only_in_production(tmp_path, monkeypatch) -> None:
+    demo = TestClient(app).get("/health")
+
+    assert "Strict-Transport-Security" not in demo.headers
+
+    settings = get_settings().model_copy(
+        update={
+            "deployment_mode": "production",
+            "api_access_token": "production-observability-token-at-least-32-chars",
+            "allow_unauthenticated_access": False,
+            "database_path": tmp_path / "hsts.sqlite3",
+            "metrics_database_path": tmp_path / "hsts-metrics.sqlite3",
+        }
+    )
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+
+    production = TestClient(app, base_url="https://testserver").get("/health")
+
+    assert production.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
