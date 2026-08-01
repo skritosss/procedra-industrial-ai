@@ -37,7 +37,6 @@ REQUIRED_GITIGNORE_ENTRIES = (
 RESEARCH_ROOT = "docs/research/"
 RESEARCH_PUBLIC_ALLOWLIST = (
     "docs/research/README.md",
-    "docs/research/procedra_ssrn_final_upload_checklist_for_alexander.md",
     "docs/research/procedra_ssrn_submission_package.md",
     "docs/research/procedra_ssrn_working_paper.md",
     "docs/research/procedra_ssrn_working_paper.pdf",

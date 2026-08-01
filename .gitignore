@@ -41,7 +41,6 @@ docs/article_review_and_roadmap.md
 # local until it is listed here on purpose.
 docs/research/*
 !docs/research/README.md
-!docs/research/procedra_ssrn_final_upload_checklist_for_alexander.md
 !docs/research/procedra_ssrn_submission_package.md
 !docs/research/procedra_ssrn_working_paper.md
 !docs/research/procedra_ssrn_working_paper.pdf
