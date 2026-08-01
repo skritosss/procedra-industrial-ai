@@ -58,7 +58,22 @@ _PLACEHOLDER_VALUES = frozenset(
         "безопасность",
     }
 )
-_MIN_SUBSTANTIVE_WORDS = 2
+CRITERION_WEIGHTS = {
+    "safety": 3.0,
+    "domain_risk_control": 2.0,
+    "source_grounding": 2.0,
+    "completeness": 1.5,
+    "request_focus": 1.5,
+    "clarity": 1.0,
+    "logical_sequence": 1.0,
+    "input_alignment": 1.0,
+    "implementation_readiness": 1.0,
+    "training_value": 0.5,
+}
+SAFETY_CRITICAL_CRITERIA = ("safety", "domain_risk_control")
+SAFETY_FLOOR = 90
+
+_MIN_SUBSTANTIVE_CHARS = 4
 _SUBSTANTIVE_SHARE_THRESHOLD = 0.8
 _CHECK_PASS_THRESHOLD = 0.95
 
@@ -76,15 +91,20 @@ def _is_substantive(value: str | None) -> bool:
     schema forbids that. It writes «не указано», «—» or «Выполнено». Those
     entries pass a non-empty check and carry no information, so every list and
     free-text check has to look at the content rather than at the length.
+
+    Length alone cannot decide this. A single word is a perfectly good PPE entry
+    («Спецодежда», «Каска»), so requiring two words would reject correct lists.
+    What separates a real entry from a filler one is the wording itself, which is
+    why the decision rests on an explicit placeholder vocabulary.
     """
     if value is None:
         return False
     cleaned = " ".join(value.split()).strip(" .;:!?—-")
-    if not cleaned:
+    if len(cleaned) < _MIN_SUBSTANTIVE_CHARS:
         return False
     if cleaned.casefold() in _PLACEHOLDER_VALUES:
         return False
-    return len(cleaned.split()) >= _MIN_SUBSTANTIVE_WORDS
+    return any(char.isalpha() for char in cleaned)
 
 
 def _substantive_share(values: list[str]) -> float:
@@ -130,7 +150,7 @@ def evaluate_instruction(
         _score_domain_risk_control(instruction, source_request, safety_findings),
         _score_implementation_readiness(instruction),
     ]
-    overall = round(sum(item.score for item in criteria) / len(criteria))
+    overall = _overall_score(criteria)
     missing = _detect_missing_elements(instruction)
     recommendations = _build_recommendations(criteria, missing, safety_findings)
     risk_level = cast(RiskLevel, _risk_level(overall, criteria, missing, safety_findings))
@@ -146,6 +166,40 @@ def evaluate_instruction(
         expert_review_notes=expert_notes,
         safety_findings=safety_findings,
     )
+
+
+def _overall_score(criteria: list[CriterionScore]) -> int:
+    """Combine the criteria, then refuse to score above the safety criteria.
+
+    Two properties matter here and neither was present while the overall score
+    was a plain average of ten equal criteria.
+
+    First, the criteria are not equally important. An instruction with a weak
+    training value is inconvenient; an instruction with weak hazard control is
+    dangerous. The weights are declared in `CRITERION_WEIGHTS` rather than being
+    implied by how many checks each criterion happens to contain.
+
+    Second, an average lets nine healthy criteria hide one broken one. A draft
+    whose PPE list says «не указано» still scored in the nineties, because the
+    remaining criteria carried it. So once a safety-critical criterion falls
+    below `SAFETY_FLOOR`, it becomes the ceiling for the whole document: an
+    instruction cannot be rated better than its own safety.
+
+    The ceiling deliberately applies only below the floor. An unconditional
+    `min()` would pin the overall score to the safety criterion even on a healthy
+    document, and every other kind of damage — off-topic steps, repeated actions,
+    unsupported values — would stop moving the number at all.
+    """
+    weighted = sum(item.score * CRITERION_WEIGHTS.get(item.criterion, 1.0) for item in criteria)
+    total_weight = sum(CRITERION_WEIGHTS.get(item.criterion, 1.0) for item in criteria)
+    average = weighted / total_weight if total_weight else 0.0
+    weakest_safety = min(
+        (item.score for item in criteria if item.criterion in SAFETY_CRITICAL_CRITERIA),
+        default=100,
+    )
+    if weakest_safety < SAFETY_FLOOR:
+        return round(min(average, weakest_safety))
+    return round(average)
 
 
 def _score_completeness(instruction: WorkInstruction) -> CriterionScore:
@@ -551,6 +605,12 @@ def _build_recommendations(
     recommendations = [
         f"Safety blocker [{finding.code}]: {finding.message}" for finding in safety_findings
     ]
+    capped_by = _binding_safety_criterion(criteria)
+    if capped_by is not None:
+        recommendations.append(
+            f"Итоговый балл ограничен критерием «{capped_by.label}» ({capped_by.score}): "
+            "инструкция не может быть оценена выше собственной безопасности."
+        )
     for criterion in criteria:
         if criterion.score < 80 and criterion.issues:
             recommendations.append(f"Усилить критерий «{criterion.label}»: {criterion.issues[0]}.")
@@ -560,6 +620,20 @@ def _build_recommendations(
         recommendations.append("Инструкция структурно готова для демонстрационного сценария; следующий шаг — экспертная проверка на реальном процессе.")
     recommendations.append("Перед внедрением подтвердить актуальность источников, локальные допуски, режимы и ответственных лиц.")
     return recommendations[:8]
+
+
+def _binding_safety_criterion(criteria: list[CriterionScore]) -> CriterionScore | None:
+    """Return the safety criterion that holds the overall score down, if any."""
+    safety_critical = [item for item in criteria if item.criterion in SAFETY_CRITICAL_CRITERIA]
+    if not safety_critical:
+        return None
+    weakest = min(safety_critical, key=lambda item: item.score)
+    if weakest.score >= SAFETY_FLOOR:
+        return None
+    weighted = sum(item.score * CRITERION_WEIGHTS.get(item.criterion, 1.0) for item in criteria)
+    total_weight = sum(CRITERION_WEIGHTS.get(item.criterion, 1.0) for item in criteria)
+    average = weighted / total_weight if total_weight else 0.0
+    return weakest if weakest.score < average else None
 
 
 def _verdict(score: int, safety_findings: list[SafetyFinding]) -> str:
