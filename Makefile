@@ -19,10 +19,10 @@ SAFETY_BACKUP ?=
 venv:
 	$(PYTHON) -m venv $(VENV)
 
-.env.local:
-	cp .env.example .env.local
+.env:
+	cp .env.example .env
 
-env: .env.local
+env: .env
 
 install: venv env
 	$(APP_PYTHON) -m pip install --upgrade pip

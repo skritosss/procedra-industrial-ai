@@ -242,4 +242,4 @@ The CI environment sets `OPENAI_ENABLED=false`, so tests remain deterministic an
   is for bootstrap/service-token flows and does not override an active browser
   session.
 - Maintain `VIDEO_ALLOWED_HOSTS` as an approved provider-specific list including required media CDN and caption domains; unlisted redirects and stream hosts fail closed.
-- `.env.local`, generated files, uploads, caches, and virtual environments are excluded from the image by `.dockerignore`.
+- `.env`, `.env.local`, generated files, uploads, caches, and virtual environments are excluded from the image by `.dockerignore`.

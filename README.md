@@ -144,7 +144,7 @@ Python 3.12 is the supported local runtime and matches Docker/CI.
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env.local
+cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
@@ -154,14 +154,16 @@ Open:
 http://127.0.0.1:8000/
 ```
 
-The default demo configuration is deterministic and does not require OpenAI credentials. For OpenAI-backed generation, embeddings, and vision analysis, configure `.env.local`:
+`DEPLOYMENT_MODE` defaults to `production`, which refuses to start until authentication, registration, password length and the video host allowlist are configured. `.env.example` selects `demo` because it describes a local run. Both `.env` and `.env.local` are read, and `.env.local` overrides `.env`.
+
+The default demo configuration is deterministic and does not require OpenAI credentials. For OpenAI-backed generation, embeddings, and vision analysis, configure `.env`:
 
 ```text
 OPENAI_ENABLED=true
 OPENAI_API_KEY=...
 ```
 
-Never commit `.env.local`, generated databases, uploads, or runtime artifacts.
+Never commit `.env`, `.env.local`, generated databases, uploads, or runtime artifacts.
 
 ## Docker local demo
 

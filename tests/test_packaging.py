@@ -186,9 +186,9 @@ def test_makefile_exposes_repeatable_project_commands() -> None:
     assert "PYTHON ?= python3.12" in makefile
     assert "install:" in makefile
     assert "$(PYTHON) -m venv $(VENV)" in makefile
-    assert ".env.local:" in makefile
-    assert "cp .env.example .env.local" in makefile
-    assert "env: .env.local" in makefile
+    assert ".env:" in makefile
+    assert "cp .env.example .env" in makefile
+    assert "env: .env" in makefile
     assert "$(APP_PYTHON) -m pip install -r requirements.txt" in makefile
     assert "run:" in makefile
     assert "test:" in makefile
@@ -198,6 +198,8 @@ def test_makefile_exposes_repeatable_project_commands() -> None:
     assert "pip-check:" in makefile
     assert "demo-eval:" in makefile
     assert "$(APP_PYTHON) scripts/run_demo_eval.py" in makefile
+    # Local targets that boot the app must state the demo mode; the default is production.
+    assert "DEMO_ENV ?= DEPLOYMENT_MODE=demo ALLOW_UNAUTHENTICATED_ACCESS=true" in makefile
     assert "CLEANUP_MAX_AGE_HOURS ?= 24" in makefile
     assert "cleanup-plan:" in makefile
     assert (

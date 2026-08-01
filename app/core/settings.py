@@ -72,7 +72,12 @@ class Settings(BaseSettings):
     video_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = Field(default_factory=tuple)
 
     model_config = SettingsConfigDict(
-        env_file=str(PROJECT_ROOT / ".env.local"),
+        # Both files are read, left to right, so `.env.local` overrides `.env`.
+        # Reading only `.env.local` meant that an administrator who copied
+        # `.env.example` to `.env` — the conventional name, and the one the
+        # README used to point at — was silently ignored, and the service came
+        # up on defaults instead of the configuration that was just written.
+        env_file=(str(PROJECT_ROOT / ".env"), str(PROJECT_ROOT / ".env.local")),
         env_file_encoding="utf-8",
         extra="ignore",
     )
