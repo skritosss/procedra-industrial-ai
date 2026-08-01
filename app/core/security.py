@@ -20,7 +20,8 @@ def api_auth_required(path: str) -> bool:
 
 
 def request_is_authorized(request: Request) -> bool:
-    expected_token = get_settings().api_access_token
+    settings = get_settings()
+    expected_token = settings.api_access_token
     authorization = request.headers.get("Authorization", "")
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() == "bearer" and token:
@@ -43,4 +44,8 @@ def request_is_authorized(request: Request) -> bool:
             request.state.current_user = user
             request.state.auth_transport = "cookie"
             return True
-    return not expected_token
+    # An unset API_ACCESS_TOKEN used to authorise every request, so the service
+    # opened up because the operator omitted a step rather than chose to. Open
+    # access now requires setting the flag, and production refuses to start with
+    # it enabled.
+    return settings.allow_unauthenticated_access

@@ -314,7 +314,9 @@ def test_ready_endpoint_reports_minimal_public_status() -> None:
 
 
 def test_ready_details_requires_observability_access(monkeypatch) -> None:
-    settings = get_settings().model_copy(update={"api_access_token": "secret-demo-token"})
+    settings = get_settings().model_copy(
+        update={"api_access_token": "secret-demo-token", "allow_unauthenticated_access": False}
+    )
     monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
     monkeypatch.setattr("app.main.get_settings", lambda: settings)
     client = TestClient(app)
@@ -401,6 +403,7 @@ def test_public_metrics_flag_cannot_bypass_production_observability_auth(tmp_pat
         update={
             "deployment_mode": "production",
             "api_access_token": static_token,
+            "allow_unauthenticated_access": False,
             "metrics_public_enabled": True,
             "database_path": tmp_path / "auth.sqlite3",
             "metrics_database_path": tmp_path / "metrics.sqlite3",
@@ -548,7 +551,9 @@ def test_saved_instruction_json_is_not_public_static_file() -> None:
 
 
 def test_api_auth_can_be_enabled_with_bearer_token(monkeypatch) -> None:
-    settings = get_settings().model_copy(update={"api_access_token": "secret-demo-token"})
+    settings = get_settings().model_copy(
+        update={"api_access_token": "secret-demo-token", "allow_unauthenticated_access": False}
+    )
     monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
     client = TestClient(app)
 
@@ -568,7 +573,9 @@ def test_api_auth_can_be_enabled_with_bearer_token(monkeypatch) -> None:
 
 
 def test_metrics_endpoint_respects_api_access_token(monkeypatch) -> None:
-    settings = get_settings().model_copy(update={"api_access_token": "secret-demo-token"})
+    settings = get_settings().model_copy(
+        update={"api_access_token": "secret-demo-token", "allow_unauthenticated_access": False}
+    )
     monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
     monkeypatch.setattr("app.main.get_settings", lambda: settings)
     client = TestClient(app)

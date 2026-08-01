@@ -513,6 +513,7 @@ def test_invalid_production_session_cookie_is_cleared_on_unauthorized_response(t
         update={
             "deployment_mode": "production",
             "api_access_token": "production-bootstrap-token-at-least-32-chars",
+            "allow_unauthenticated_access": False,
             "auth_public_registration_enabled": False,
             "auth_allow_role_self_assignment": False,
             "auth_min_password_length": 12,

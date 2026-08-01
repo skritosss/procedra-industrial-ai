@@ -10,7 +10,7 @@ DATABASE ?= generated/app.sqlite3
 # The default deployment mode is production, so an unconfigured run refuses to
 # start — that is the intent. Declaring the mode here keeps the gate
 # reproducible without depending on an untracked .env file.
-DEMO_ENV ?= DEPLOYMENT_MODE=demo
+DEMO_ENV ?= DEPLOYMENT_MODE=demo ALLOW_UNAUTHENTICATED_ACCESS=true
 BACKUP ?=
 SAFETY_BACKUP ?=
 

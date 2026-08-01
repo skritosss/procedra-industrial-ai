@@ -23,6 +23,9 @@ def isolate_runtime_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("DEPLOYMENT_MODE", "demo")
     monkeypatch.setenv("OPENAI_ENABLED", "false")
     monkeypatch.setenv("API_ACCESS_TOKEN", "")
+    # An empty token no longer implies open access, so the suite has to ask for
+    # it the same way an operator would.
+    monkeypatch.setenv("ALLOW_UNAUTHENTICATED_ACCESS", "true")
     monkeypatch.setenv("AUTH_PUBLIC_REGISTRATION_ENABLED", "true")
     monkeypatch.setenv("AUTH_ALLOW_ROLE_SELF_ASSIGNMENT", "true")
     get_settings.cache_clear()

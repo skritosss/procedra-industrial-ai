@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     metrics_alert_min_requests: int = Field(default=20, ge=1, le=1_000_000)
     metrics_public_enabled: bool = False
     api_access_token: str | None = None
+    # Open access is an explicit choice, never a side effect of leaving
+    # API_ACCESS_TOKEN unset. Production rejects it outright.
+    allow_unauthenticated_access: bool = False
     auth_public_registration_enabled: bool = True
     auth_allow_role_self_assignment: bool = True
     auth_min_password_length: int = Field(default=8, ge=8, le=128)
@@ -147,6 +150,8 @@ class Settings(BaseSettings):
         unsafe_options = []
         if not self.api_access_token or len(self.api_access_token) < 32:
             unsafe_options.append("API_ACCESS_TOKEN must contain at least 32 characters")
+        if self.allow_unauthenticated_access:
+            unsafe_options.append("ALLOW_UNAUTHENTICATED_ACCESS must be false")
         if self.auth_public_registration_enabled:
             unsafe_options.append("AUTH_PUBLIC_REGISTRATION_ENABLED must be false")
         if self.auth_allow_role_self_assignment:

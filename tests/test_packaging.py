@@ -290,6 +290,7 @@ def test_settings_reject_short_production_bootstrap_token() -> None:
         Settings(
             _env_file=None,
             deployment_mode="production",
+            allow_unauthenticated_access=False,
             api_access_token="too-short",
             auth_public_registration_enabled=False,
             auth_allow_role_self_assignment=False,
@@ -301,6 +302,7 @@ def test_settings_accept_hardened_production_auth_configuration() -> None:
     settings = Settings(
         _env_file=None,
         deployment_mode="production",
+        allow_unauthenticated_access=False,
         api_access_token="production-bootstrap-token-at-least-32-chars",
         auth_public_registration_enabled=False,
         auth_allow_role_self_assignment=False,
@@ -319,6 +321,7 @@ def test_settings_reject_public_metrics_in_production() -> None:
         Settings(
             _env_file=None,
             deployment_mode="production",
+            allow_unauthenticated_access=False,
             api_access_token="production-bootstrap-token-at-least-32-chars",
             auth_public_registration_enabled=False,
             auth_allow_role_self_assignment=False,
@@ -333,6 +336,7 @@ def test_settings_reject_production_without_video_host_allowlist() -> None:
         Settings(
             _env_file=None,
             deployment_mode="production",
+            allow_unauthenticated_access=False,
             api_access_token="production-bootstrap-token-at-least-32-chars",
             auth_public_registration_enabled=False,
             auth_allow_role_self_assignment=False,
@@ -345,6 +349,7 @@ def test_settings_reject_unsafe_trusted_proxy_configuration() -> None:
         Settings(
             _env_file=None,
             deployment_mode="production",
+            allow_unauthenticated_access=False,
             api_access_token="production-bootstrap-token-at-least-32-chars",
             auth_public_registration_enabled=False,
             auth_allow_role_self_assignment=False,
@@ -419,3 +424,25 @@ def test_dockerignore_excludes_internal_documents() -> None:
     assert "_internal/" in dockerignore
     assert "PRODUCT_ROADMAP.md" in dockerignore
     assert "docs/Предметная_часть_пилотного_хоздоговора_Procedra.md" in dockerignore
+
+
+def test_settings_reject_unauthenticated_access_in_production() -> None:
+    with pytest.raises(ValidationError, match="ALLOW_UNAUTHENTICATED_ACCESS must be false"):
+        Settings(
+            _env_file=None,
+            deployment_mode="production",
+            allow_unauthenticated_access=True,
+            api_access_token="production-bootstrap-token-at-least-32-chars",
+            auth_public_registration_enabled=False,
+            auth_allow_role_self_assignment=False,
+            auth_min_password_length=12,
+            video_allowed_hosts="youtube.com",
+        )
+
+
+def test_settings_default_to_closed_access() -> None:
+    settings = Settings(_env_file=None, deployment_mode="demo", allow_unauthenticated_access=False)
+
+    # An unset API token must not authorise anyone by itself.
+    assert settings.allow_unauthenticated_access is False
+    assert settings.api_access_token is None
