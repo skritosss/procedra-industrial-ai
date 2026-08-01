@@ -28,6 +28,77 @@ CRITERION_LABELS = {
 }
 
 
+_PLACEHOLDER_VALUES = frozenset(
+    {
+        "",
+        "-",
+        "--",
+        "—",
+        "n/a",
+        "na",
+        "tbd",
+        "нет",
+        "нет данных",
+        "не указано",
+        "не указан",
+        "не указана",
+        "не определено",
+        "не определён",
+        "не определен",
+        "не применимо",
+        "отсутствует",
+        "уточнить",
+        "выполнено",
+        "готово",
+        "ок",
+        "ok",
+        "контроль",
+        "проверка",
+        "безопасность",
+    }
+)
+_MIN_SUBSTANTIVE_WORDS = 2
+_SUBSTANTIVE_SHARE_THRESHOLD = 0.8
+
+
+def _is_substantive(value: str | None) -> bool:
+    """Tell a filled-in field from one that only looks filled in.
+
+    A model that does not know an answer rarely leaves the field empty — the
+    schema forbids that. It writes «не указано», «—» or «Выполнено». Those
+    entries pass a non-empty check and carry no information, so every list and
+    free-text check has to look at the content rather than at the length.
+    """
+    if value is None:
+        return False
+    cleaned = " ".join(value.split()).strip(" .;:!?—-")
+    if not cleaned:
+        return False
+    if cleaned.casefold() in _PLACEHOLDER_VALUES:
+        return False
+    return len(cleaned.split()) >= _MIN_SUBSTANTIVE_WORDS
+
+
+def _substantive_share(values: list[str]) -> float:
+    if not values:
+        return 0.0
+    return sum(1 for value in values if _is_substantive(value)) / len(values)
+
+
+def _is_substantive_list(values: list[str], minimum: int = 1) -> bool:
+    substantive = [value for value in values if _is_substantive(value)]
+    if len(substantive) < minimum:
+        return False
+    return _substantive_share(values) >= _SUBSTANTIVE_SHARE_THRESHOLD
+
+
+def _distinct_share(values: list[str]) -> float:
+    if not values:
+        return 0.0
+    normalized = [" ".join(value.split()).casefold() for value in values]
+    return len(set(normalized)) / len(normalized)
+
+
 def evaluate_instruction_request(request: EvaluationRequest) -> InstructionEvaluation:
     return evaluate_instruction(request.instruction, request.source_request)
 
@@ -71,16 +142,27 @@ def evaluate_instruction(
 
 def _score_completeness(instruction: WorkInstruction) -> CriterionScore:
     checks = {
-        "указаны СИЗ": bool(instruction.required_ppe),
-        "указаны инструменты и документы": bool(instruction.required_tools),
-        "указаны требования безопасности": bool(instruction.safety_requirements),
-        "указаны опасные зоны": bool(instruction.hazard_zones),
-        "указаны предварительные условия": bool(instruction.prerequisites),
+        "указаны СИЗ": _is_substantive_list(instruction.required_ppe),
+        "указаны инструменты и документы": _is_substantive_list(instruction.required_tools),
+        "указаны требования безопасности": _is_substantive_list(instruction.safety_requirements),
+        "указаны опасные зоны": _is_substantive_list(instruction.hazard_zones),
+        "указаны предварительные условия": _is_substantive_list(instruction.prerequisites),
         "есть не менее 4 шагов": len(instruction.steps) >= 4,
-        "есть контрольные точки": bool(instruction.control_points),
-        "есть действия при нештатной ситуации": bool(instruction.emergency_actions),
+        "есть контрольные точки": _is_substantive_list(instruction.control_points, minimum=3)
+        and _distinct_share(instruction.control_points) >= 0.8,
+        "есть действия при нештатной ситуации": _is_substantive_list(instruction.emergency_actions),
     }
-    return _criterion("completeness", checks)
+    issue_labels = {
+        "указаны СИЗ": "список СИЗ заполнен формально",
+        "указаны инструменты и документы": "список инструментов и документов заполнен формально",
+        "указаны требования безопасности": "требования безопасности заполнены формально",
+        "указаны опасные зоны": "опасные зоны заполнены формально",
+        "указаны предварительные условия": "предварительные условия заполнены формально",
+        "есть не менее 4 шагов": "шагов меньше четырёх",
+        "есть контрольные точки": "контрольные точки формальные или повторяются",
+        "есть действия при нештатной ситуации": "действия при нештатной ситуации заполнены формально",
+    }
+    return _criterion("completeness", checks, issue_labels)
 
 
 def _score_clarity(instruction: WorkInstruction) -> CriterionScore:
@@ -91,16 +173,29 @@ def _score_clarity(instruction: WorkInstruction) -> CriterionScore:
         for step in instruction.steps
         if any(marker in step.action.lower() for marker in vague_markers)
     )
+    actions = [step.action for step in instruction.steps]
     checks = {
         "шаги достаточно развернуты": bool(action_lengths) and min(action_lengths) >= 4,
-        "у каждого шага есть ожидаемый результат": all(step.expected_result for step in instruction.steps),
+        "у каждого шага есть содержательный ожидаемый результат": all(
+            _is_substantive(step.expected_result) for step in instruction.steps
+        ),
         "у большинства шагов есть способ проверки": _share(
-            bool(step.verification_method) for step in instruction.steps
+            _is_substantive(step.verification_method) for step in instruction.steps
         )
         >= 0.7,
         "мало слишком общих формулировок": vague_count <= 1,
+        "шаги не повторяют друг друга": _distinct_share(actions) >= 0.9,
     }
-    return _criterion("clarity", checks)
+    issue_labels = {
+        "шаги достаточно развернуты": "часть шагов сформулирована слишком коротко",
+        "у каждого шага есть содержательный ожидаемый результат": (
+            "ожидаемый результат части шагов формален"
+        ),
+        "у большинства шагов есть способ проверки": "у части шагов нет способа проверки",
+        "мало слишком общих формулировок": "слишком много общих формулировок",
+        "шаги не повторяют друг друга": "шаги повторяются",
+    }
+    return _criterion("clarity", checks, issue_labels)
 
 
 def _score_input_alignment(
@@ -180,15 +275,53 @@ def _score_request_focus(
 
 
 def _score_safety(instruction: WorkInstruction) -> CriterionScore:
-    safety_steps = sum(1 for step in instruction.steps if step.safety_note)
+    safety_steps = sum(1 for step in instruction.steps if _is_substantive(step.safety_note))
     checks = {
-        "указаны СИЗ": bool(instruction.required_ppe),
-        "указаны опасные зоны": bool(instruction.hazard_zones),
-        "указаны требования безопасности": len(instruction.safety_requirements) >= 3,
+        "указаны СИЗ": _is_substantive_list(instruction.required_ppe),
+        "указаны опасные зоны": _is_substantive_list(instruction.hazard_zones),
+        "указаны требования безопасности": _is_substantive_list(
+            instruction.safety_requirements, minimum=3
+        ),
         "у большинства шагов есть примечания по безопасности": _safe_ratio(safety_steps, len(instruction.steps)) >= 0.6,
-        "есть аварийные действия": len(instruction.emergency_actions) >= 3,
+        "есть аварийные действия": _is_substantive_list(instruction.emergency_actions, minimum=3),
+        "опасные зоны адресованы в тексте": _hazard_zones_addressed(instruction),
     }
-    return _criterion("safety", checks)
+    issue_labels = {
+        "указаны СИЗ": "список СИЗ заполнен формально",
+        "указаны опасные зоны": "опасные зоны заполнены формально",
+        "указаны требования безопасности": "требований безопасности мало или они формальны",
+        "у большинства шагов есть примечания по безопасности": (
+            "у части шагов нет содержательного примечания по безопасности"
+        ),
+        "есть аварийные действия": "аварийных действий мало или они формальны",
+        "опасные зоны адресованы в тексте": (
+            "часть заявленных опасных зон нигде не адресована"
+        ),
+    }
+    return _criterion("safety", checks, issue_labels)
+
+
+def _hazard_zones_addressed(instruction: WorkInstruction) -> bool:
+    """Check that a declared hazard zone is actually handled somewhere.
+
+    Listing a hazard and then never mentioning it again is the failure mode this
+    catches: the completeness check sees a filled list, and nothing else notices
+    that no step, requirement or emergency action refers to that zone.
+    """
+    zones = [zone for zone in instruction.hazard_zones if _is_substantive(zone)]
+    if not zones:
+        return False
+    body = " ".join(
+        [
+            *instruction.safety_requirements,
+            *instruction.control_points,
+            *instruction.emergency_actions,
+            *[step.action for step in instruction.steps],
+            *[step.safety_note or "" for step in instruction.steps],
+        ]
+    ).casefold()
+    addressed = sum(1 for zone in zones if _keyword_overlap(zone, body) >= 0.5)
+    return addressed / len(zones) >= 0.5
 
 
 def _score_logical_sequence(instruction: WorkInstruction) -> CriterionScore:
@@ -232,9 +365,11 @@ def _score_source_grounding(
     checks = {
         "есть входной или найденный контекст": bool(context),
         "контекст отражен в инструкции": not context or _keyword_overlap(context, instruction_text) >= 0.12,
-        "нет неподтвержденных точных параметров": not _has_unverified_precise_values(instruction_text),
+        "нет неподтвержденных точных параметров": _precise_values_are_covered(instruction),
         "неподтвержденные требования помечены для локальной проверки": _mentions_local_verification(instruction_text),
-        "есть типизированное происхождение утверждений": bool(instruction.evidence_claims),
+        "есть типизированное происхождение утверждений": _is_substantive_list(
+            [claim.text for claim in instruction.evidence_claims]
+        ),
         "непроверенные утверждения не помечены подтвержденными": not any(
             claim.validation_status == "unverified"
             and any(marker in claim.text.casefold() for marker in ["подтвержденн", "confirmed"])
@@ -427,16 +562,42 @@ def _expert_review_notes(
     return notes[:8]
 
 
-def _has_unverified_precise_values(text: str) -> bool:
-    value_patterns = [
-        r"\b\d+([,.]\d+)?\s*(мм|см|м|кг|нм|об/мин|rpm|бар|мпа|°c|градус)",
-        r"\b\d+([,.]\d+)?\s*(сек|мин|час)",
+def _precise_values_are_covered(instruction: WorkInstruction) -> bool:
+    """Require each precise value to be covered where it is stated.
+
+    The previous form scanned the whole document: one occurrence of «подтвердить»
+    anywhere marked every tolerance, torque and temperature in the text as
+    handled. Coverage is now decided per step, and a step that states an exact
+    value has to carry its own verification marker or name the parameter in the
+    local-verification list.
+    """
+    local_verification = " ".join(instruction.local_verification_required).casefold()
+    steps_with_values = [
+        step for step in instruction.steps if _has_precise_value(f"{step.action} {step.expected_result}")
     ]
+    if not steps_with_values:
+        return not _has_precise_value(_instruction_text(instruction)) or _mentions_local_verification(
+            local_verification
+        )
+    covered = 0
+    for step in steps_with_values:
+        own_text = " ".join(
+            [step.action, step.expected_result, step.verification_method or "", step.safety_note or ""]
+        )
+        if _mentions_local_verification(own_text) or _keyword_overlap(step.action, local_verification) >= 0.3:
+            covered += 1
+    return covered == len(steps_with_values)
+
+
+def _has_precise_value(text: str) -> bool:
     lowered = text.lower()
-    has_value = any(re.search(pattern, lowered) for pattern in value_patterns)
-    if not has_value:
-        return False
-    return not _mentions_local_verification(lowered)
+    return any(re.search(pattern, lowered) for pattern in _PRECISE_VALUE_PATTERNS)
+
+
+_PRECISE_VALUE_PATTERNS = (
+    r"\b\d+([,.]\d+)?\s*(мм|см|м|кг|нм|н·м|об/мин|rpm|бар|мпа|°c|градус)",
+    r"\b\d+([,.]\d+)?\s*(сек|мин|час)",
+)
 
 
 def _mentions_local_verification(text: str) -> bool:
