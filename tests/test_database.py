@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import sys
+from contextlib import closing
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,8 @@ from app.storage.database import (
     CURRENT_SCHEMA_VERSION,
     MIGRATIONS,
     apply_migrations,
+    current_schema_version,
+    reset_schema_cache,
     backup_database,
     connect_database,
     database_is_healthy,
@@ -550,3 +553,61 @@ def test_database_management_cli_reports_corruption_without_traceback(tmp_path, 
     assert error["status"] == "error"
     assert "Unable to verify database" in error["error"]
     assert "Traceback" not in captured.err
+
+
+def test_migrations_are_applied_once_per_database(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "cached.sqlite3"
+    reset_schema_cache()
+    calls: list[int] = []
+    original = database_module._apply_migrations_now
+
+    def counting(connection, **kwargs):
+        calls.append(1)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(database_module, "_apply_migrations_now", counting)
+
+    for _ in range(5):
+        with connect_database(database_path) as connection:
+            assert apply_migrations(connection) == CURRENT_SCHEMA_VERSION
+
+    # The schema cannot change while the process runs, so re-applying it on every
+    # storage operation only bought a write transaction per request.
+    assert len(calls) == 1
+
+
+def test_resetting_the_schema_cache_forces_reapplication(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "reset.sqlite3"
+    reset_schema_cache()
+    calls: list[int] = []
+    original = database_module._apply_migrations_now
+
+    def counting(connection, **kwargs):
+        calls.append(1)
+        return original(connection, **kwargs)
+
+    monkeypatch.setattr(database_module, "_apply_migrations_now", counting)
+
+    with connect_database(database_path) as connection:
+        apply_migrations(connection)
+    reset_schema_cache()
+    with connect_database(database_path) as connection:
+        apply_migrations(connection)
+
+    assert len(calls) == 2
+
+
+def test_separate_databases_are_migrated_separately(tmp_path) -> None:
+    reset_schema_cache()
+    first = tmp_path / "first.sqlite3"
+    second = tmp_path / "second.sqlite3"
+    with connect_database(first) as connection:
+        apply_migrations(connection)
+    with connect_database(second) as connection:
+        assert apply_migrations(connection) == CURRENT_SCHEMA_VERSION
+
+    # A cache keyed by anything coarser than the file would leave the second
+    # database unmigrated.
+    with closing(sqlite3.connect(second)) as connection:
+        connection.row_factory = sqlite3.Row
+        assert current_schema_version(connection) == CURRENT_SCHEMA_VERSION

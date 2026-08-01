@@ -4,6 +4,7 @@ import pytest
 
 from app.core.rate_limit import reset_rate_limit_state
 from app.core.settings import get_settings
+from app.storage.database import reset_schema_cache
 from app.storage.metrics_store import initialize_metrics_store
 
 
@@ -29,6 +30,9 @@ def isolate_runtime_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("AUTH_PUBLIC_REGISTRATION_ENABLED", "true")
     monkeypatch.setenv("AUTH_ALLOW_ROLE_SELF_ASSIGNMENT", "true")
     get_settings.cache_clear()
+    # Each test gets fresh database files and a path can repeat across runs, so
+    # the per-process schema cache must not carry over between tests.
+    reset_schema_cache()
     reset_rate_limit_state(database_path)
     initialize_metrics_store(metrics_database_path)
 
@@ -41,3 +45,6 @@ def isolate_runtime_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     yield
     get_settings.cache_clear()
+    # Each test gets fresh database files and a path can repeat across runs, so
+    # the per-process schema cache must not carry over between tests.
+    reset_schema_cache()

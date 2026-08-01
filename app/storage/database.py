@@ -40,7 +40,61 @@ def connect_database(database_path: Path | None = None) -> sqlite3.Connection:
     return connection
 
 
-def apply_migrations(connection: sqlite3.Connection, *, session_ttl_seconds: int = 86_400) -> int:
+_APPLIED_SCHEMA_VERSIONS: dict[str, int] = {}
+
+
+def reset_schema_cache() -> None:
+    """Forget which database files have had their schema verified.
+
+    Needed whenever a database file is replaced underneath a running process —
+    a restore, or a test that recreates a database at a path already seen.
+    """
+    _APPLIED_SCHEMA_VERSIONS.clear()
+
+
+def _database_key(connection: sqlite3.Connection) -> str | None:
+    """Identify the main database file, or None for in-memory databases."""
+    try:
+        for row in connection.execute("PRAGMA database_list"):
+            if row[1] == "main":
+                path = str(row[2] or "")
+                return path or None
+    except sqlite3.Error:
+        return None
+    return None
+
+
+def apply_migrations(
+    connection: sqlite3.Connection,
+    *,
+    session_ttl_seconds: int = 86_400,
+    force: bool = False,
+) -> int:
+    """Bring the schema up to date, at most once per database per process.
+
+    This used to run on every storage operation, and it is not a read: it
+    executes `CREATE TABLE IF NOT EXISTS` and commits before doing anything
+    else. Since SQLite allows one writer, every authenticated request paid for a
+    write transaction purely to re-confirm a schema that cannot change while the
+    process runs.
+
+    The schema is applied at startup and on the first use of any database file;
+    afterwards the recorded version is returned without touching the connection.
+    Pass `force=True` to re-run the check, and call `reset_schema_cache()` when a
+    database file is replaced.
+    """
+    key = _database_key(connection)
+    if not force and key is not None:
+        cached = _APPLIED_SCHEMA_VERSIONS.get(key)
+        if cached is not None:
+            return cached
+    version = _apply_migrations_now(connection, session_ttl_seconds=session_ttl_seconds)
+    if key is not None:
+        _APPLIED_SCHEMA_VERSIONS[key] = version
+    return version
+
+
+def _apply_migrations_now(connection: sqlite3.Connection, *, session_ttl_seconds: int = 86_400) -> int:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -162,6 +216,9 @@ def restore_database(backup_path: Path, target_path: Path, *, safety_backup_path
         temporary.replace(target)
         Path(f"{target}-wal").unlink(missing_ok=True)
         Path(f"{target}-shm").unlink(missing_ok=True)
+        # The file behind this path is a different database now, so the recorded
+        # schema version no longer describes it.
+        reset_schema_cache()
         return target
     finally:
         temporary.unlink(missing_ok=True)
