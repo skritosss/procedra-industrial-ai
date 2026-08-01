@@ -93,7 +93,7 @@ document-ownership-plan:
 document-ownership-apply:
 	$(APP_PYTHON) scripts/reconcile_document_ownership.py --database "$(DATABASE)" --apply
 
-smoke: compile lint typecheck static-smoke public-scope-audit public-content-audit safety-eval test pip-check docker-config api-smoke
+smoke: compile lint typecheck static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination test pip-check docker-config api-smoke
 
 api-smoke:
 	$(APP_PYTHON) -c "from fastapi.testclient import TestClient; from app.main import app; client = TestClient(app); assert client.get('/health').status_code == 200; response = client.post('/api/instructions/generate', json={'task': 'Подготовить рабочее место оператора перед запуском оборудования'}); assert response.status_code == 200"
