@@ -9,7 +9,7 @@ DATABASE ?= generated/app.sqlite3
 BACKUP ?=
 SAFETY_BACKUP ?=
 
-.PHONY: venv env install run video-worker video-job-contention test lint typecheck compile pip-check static-smoke public-scope-audit public-content-audit safety-eval demo-eval partner-demo-pack cleanup-plan cleanup-delete db-migrate db-verify db-backup db-restore document-ownership-plan document-ownership-apply smoke api-smoke health ready ready-details metrics docker-build docker-config docker-up docker-down
+.PHONY: venv env install run video-worker video-job-contention test lint typecheck compile pip-check static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination demo-eval partner-demo-pack cleanup-plan cleanup-delete db-migrate db-verify db-backup db-restore document-ownership-plan document-ownership-apply smoke api-smoke health ready ready-details metrics docker-build docker-config docker-up docker-down
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -58,6 +58,9 @@ public-content-audit:
 
 safety-eval:
 	$(APP_PYTHON) scripts/run_safety_eval.py
+
+quality-discrimination:
+	$(APP_PYTHON) scripts/run_quality_discrimination.py
 
 demo-eval:
 	$(APP_PYTHON) scripts/run_demo_eval.py

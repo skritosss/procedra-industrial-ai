@@ -1,0 +1,65 @@
+from app.evaluation.quality import evaluate_instruction
+from app.schemas.instruction import WorkInstruction
+from scripts import run_quality_discrimination as harness
+
+
+def _baseline():
+    return harness.build_baselines(1)[0]
+
+
+def test_mutations_keep_the_instruction_schema_valid() -> None:
+    _, instruction, _ = _baseline()
+    for mutation in harness.MUTATIONS:
+        damaged = mutation.apply(instruction)
+        # A mutation that breaks the schema would be rejected before evaluation
+        # in production, so it would not test anything the evaluator can meet.
+        assert WorkInstruction.model_validate(damaged.model_dump()), mutation.name
+
+
+def test_mutations_do_not_alter_the_original_instruction() -> None:
+    _, instruction, _ = _baseline()
+    before = instruction.model_dump()
+    for mutation in harness.MUTATIONS:
+        mutation.apply(instruction)
+    assert instruction.model_dump() == before
+
+
+def test_every_mutation_declares_a_target_criterion() -> None:
+    known = {
+        "completeness",
+        "clarity",
+        "input_alignment",
+        "request_focus",
+        "safety",
+        "logical_sequence",
+        "training_value",
+        "source_grounding",
+        "domain_risk_control",
+        "implementation_readiness",
+    }
+    assert harness.MUTATIONS
+    for mutation in harness.MUTATIONS:
+        assert mutation.targets, mutation.name
+        assert set(mutation.targets) <= known, mutation.name
+
+
+def test_removing_every_safety_note_lowers_the_safety_criterion() -> None:
+    _, instruction, source_request = _baseline()
+    before = _criterion_score(evaluate_instruction(instruction, source_request), "safety")
+    damaged = harness._strip_safety_notes(instruction)
+    after = _criterion_score(evaluate_instruction(damaged, source_request), "safety")
+    assert after < before
+
+
+def test_report_lists_undetected_mutations_and_dead_checks() -> None:
+    report = harness.run(limit=1)
+    assert report.scenario_count == 1
+    assert report.mutation_count == len(harness.MUTATIONS)
+    assert len(report.mutations) == len(harness.MUTATIONS)
+    checked = {item.check for item in report.checks}
+    assert set(report.non_discriminating_checks) <= checked
+    assert report.ok is (not report.undetected_mutations)
+
+
+def _criterion_score(evaluation, name: str) -> int:
+    return next(item.score for item in evaluation.criteria if item.criterion == name)
