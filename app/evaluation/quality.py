@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 import re
 from typing import cast
 
@@ -59,6 +60,13 @@ _PLACEHOLDER_VALUES = frozenset(
 )
 _MIN_SUBSTANTIVE_WORDS = 2
 _SUBSTANTIVE_SHARE_THRESHOLD = 0.8
+_CHECK_PASS_THRESHOLD = 0.95
+
+
+def _check_value(outcome: bool | float) -> float:
+    if isinstance(outcome, bool):
+        return 1.0 if outcome else 0.0
+    return max(0.0, min(1.0, float(outcome)))
 
 
 def _is_substantive(value: str | None) -> bool:
@@ -181,10 +189,9 @@ def _score_clarity(instruction: WorkInstruction) -> CriterionScore:
         ),
         "у большинства шагов есть способ проверки": _share(
             _is_substantive(step.verification_method) for step in instruction.steps
-        )
-        >= 0.7,
+        ),
         "мало слишком общих формулировок": vague_count <= 1,
-        "шаги не повторяют друг друга": _distinct_share(actions) >= 0.9,
+        "шаги не повторяют друг друга": _distinct_share(actions),
     }
     issue_labels = {
         "шаги достаточно развернуты": "часть шагов сформулирована слишком коротко",
@@ -256,7 +263,7 @@ def _score_request_focus(
     checks = {
         "название или назначение отражает запрос": _keyword_overlap(focus_text, f"{instruction.title} {instruction.purpose}") >= 0.12,
         "текст инструкции сохраняет ключевые термины запроса": not focus_tokens or _keyword_overlap(focus_text, instruction_text) >= 0.16,
-        "большинство шагов связано с задачей": step_focus_share >= 0.6,
+        "большинство шагов связано с задачей": step_focus_share,
         "есть явная граница, не расширяющая задачу": any(word in boundary_text for word in ["границ", "не расшир", "конкретн", "только"]),
         "нет признаков ухода в нерелевантную смежную операцию": not _has_scope_drift(source_request, instruction_text.lower()),
     }
@@ -282,7 +289,7 @@ def _score_safety(instruction: WorkInstruction) -> CriterionScore:
         "указаны требования безопасности": _is_substantive_list(
             instruction.safety_requirements, minimum=3
         ),
-        "у большинства шагов есть примечания по безопасности": _safe_ratio(safety_steps, len(instruction.steps)) >= 0.6,
+        "у большинства шагов есть примечания по безопасности": _safe_ratio(safety_steps, len(instruction.steps)),
         "есть аварийные действия": _is_substantive_list(instruction.emergency_actions, minimum=3),
         "опасные зоны адресованы в тексте": _hazard_zones_addressed(instruction),
     }
@@ -301,7 +308,7 @@ def _score_safety(instruction: WorkInstruction) -> CriterionScore:
     return _criterion("safety", checks, issue_labels)
 
 
-def _hazard_zones_addressed(instruction: WorkInstruction) -> bool:
+def _hazard_zones_addressed(instruction: WorkInstruction) -> float:
     """Check that a declared hazard zone is actually handled somewhere.
 
     Listing a hazard and then never mentioning it again is the failure mode this
@@ -310,7 +317,7 @@ def _hazard_zones_addressed(instruction: WorkInstruction) -> bool:
     """
     zones = [zone for zone in instruction.hazard_zones if _is_substantive(zone)]
     if not zones:
-        return False
+        return 0.0
     body = " ".join(
         [
             *instruction.safety_requirements,
@@ -321,7 +328,11 @@ def _hazard_zones_addressed(instruction: WorkInstruction) -> bool:
         ]
     ).casefold()
     addressed = sum(1 for zone in zones if _keyword_overlap(zone, body) >= 0.5)
-    return addressed / len(zones) >= 0.5
+    return addressed / len(zones)
+
+
+_PREPARATION_MARKERS = ("подготовить", "сверить", "уточнить", "убедиться", "определить", "получить")
+_COMPLETION_MARKERS = ("зафиксировать", "передать", "заверш", "оформить", "сдать", "занести в журнал")
 
 
 def _score_logical_sequence(instruction: WorkInstruction) -> CriterionScore:
@@ -329,19 +340,48 @@ def _score_logical_sequence(instruction: WorkInstruction) -> CriterionScore:
     checks = {
         "нумерация идет без пропусков": numbers == list(range(1, len(numbers) + 1)),
         "есть подготовительный шаг": bool(instruction.steps)
-        and any(
-            word in instruction.steps[0].action.lower()
-            for word in ["уточнить", "проверить", "подготовить", "сверить", "подтвердить", "определить"]
-        ),
-        "есть финальная проверка": any(
-            word in instruction.steps[-1].action.lower()
-            for word in ["проверить", "зафиксировать", "передать", "заверш"]
-        )
-        if instruction.steps
-        else False,
+        and _matches_any(instruction.steps[0].action, _PREPARATION_MARKERS),
+        "есть финальная проверка": bool(instruction.steps)
+        and _matches_any(instruction.steps[-1].action, _COMPLETION_MARKERS),
+        "подготовка идет раньше завершения": _preparation_precedes_completion(instruction),
         "контрольные точки связаны с процессом": len(instruction.control_points) >= 3,
     }
-    return _criterion("logical_sequence", checks)
+    issue_labels = {
+        "нумерация идет без пропусков": "нумерация шагов нарушена",
+        "есть подготовительный шаг": "первый шаг не является подготовительным",
+        "есть финальная проверка": "последний шаг не завершает работу",
+        "подготовка идет раньше завершения": "подготовительные действия стоят после завершающих",
+        "контрольные точки связаны с процессом": "контрольных точек слишком мало",
+    }
+    return _criterion("logical_sequence", checks, issue_labels)
+
+
+def _matches_any(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = text.casefold()
+    return any(marker in lowered for marker in markers)
+
+
+def _preparation_precedes_completion(instruction: WorkInstruction) -> bool:
+    """Check the order of the work, not the order of the numbers.
+
+    The schema already guarantees that `number` runs 1..n, so a numbering check
+    can never fail on a document that reached evaluation. What can still be wrong
+    is the order of the actions themselves: a draft that files the results first
+    and prepares the workplace last is numbered perfectly and is still unusable.
+
+    The marker sets are kept disjoint on purpose. While «проверить» counted as
+    both preparation and completion, a fully reversed instruction satisfied both
+    checks and the criterion stayed at its maximum.
+    """
+    preparation = [
+        index for index, step in enumerate(instruction.steps) if _matches_any(step.action, _PREPARATION_MARKERS)
+    ]
+    completion = [
+        index for index, step in enumerate(instruction.steps) if _matches_any(step.action, _COMPLETION_MARKERS)
+    ]
+    if not preparation or not completion:
+        return True
+    return min(preparation) < max(completion)
 
 
 def _score_training_value(instruction: WorkInstruction) -> CriterionScore:
@@ -437,8 +477,8 @@ def _score_implementation_readiness(instruction: WorkInstruction) -> CriterionSc
 
 def _criterion(
     name: str,
-    checks: dict[str, bool],
-    issue_labels: dict[str, str] | None = None,
+    checks: Mapping[str, bool | float],
+    issue_labels: Mapping[str, str] | None = None,
 ) -> CriterionScore:
     """Свести набор проверок в оценку по критерию.
 
@@ -447,11 +487,28 @@ def _criterion(
     ("нет критических сигналов"): для них та же формулировка в списке проблем
     означала бы ровно противоположное тому, что произошло. Поэтому для таких
     проверок передаётся `issue_labels` — отдельный текст для случая провала.
+
+    Значение проверки — либо `bool`, либо доля от 0 до 1. Доли нужны там, где
+    измеряемое свойство непрерывно: «шаги связаны с задачей» — это не да/нет, а
+    какая часть шагов связана. Пока такие проверки были булевыми, документ, уже
+    не прошедший порог, нельзя было испортить дальше: одна лишняя нерелевантная
+    операция и полностью посторонняя инструкция давали одинаковый балл.
     """
     overrides = issue_labels or {}
-    passed = [label for label, ok in checks.items() if ok]
-    failed = [overrides.get(label, label) for label, ok in checks.items() if not ok]
-    score = round(100 * len(passed) / len(checks)) if checks else 0
+    passed: list[str] = []
+    failed: list[str] = []
+    values: list[float] = []
+    for label, outcome in checks.items():
+        value = _check_value(outcome)
+        values.append(value)
+        if value >= _CHECK_PASS_THRESHOLD:
+            passed.append(label)
+            continue
+        text = overrides.get(label, label)
+        if value > 0:
+            text = f"{text} (выполнено на {round(value * 100)}%)"
+        failed.append(text)
+    score = round(100 * sum(values) / len(values)) if values else 0
     return CriterionScore(
         criterion=cast(EvaluationCriterion, name),
         label=CRITERION_LABELS[name],
