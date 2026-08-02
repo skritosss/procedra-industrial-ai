@@ -197,8 +197,13 @@ def run(label: str, levels: tuple[int, ...], per_level: int, workers: int = 1) -
             "ALLOW_UNAUTHENTICATED_ACCESS": "false",
             "DATABASE_PATH": str(root / "app.sqlite3"),
             "METRICS_DATABASE_PATH": str(root / "metrics.sqlite3"),
+            "RATE_LIMIT_DATABASE_PATH": str(root / "rate_limits.sqlite3"),
             "AUTH_PUBLIC_REGISTRATION_ENABLED": "true",
             "OPENAI_ENABLED": "false",
+            # The probe measures the service, not the limiter. Without this it
+            # would report the rate limit's ceiling as the system's throughput.
+            "API_RATE_LIMIT_REQUESTS": "100000",
+            "RATE_LIMIT_REQUESTS": "10000",
         }
         server = subprocess.Popen(
             [

@@ -52,7 +52,21 @@ def reset_rate_limit_state(database_path: Path | None = None) -> None:
         connection.commit()
 
 
+API_PREFIX = "/api/"
+
+
 def rate_limit_applies(request: Request) -> bool:
+    """Every API call counts against something.
+
+    Limits used to apply to POST and PATCH on six prefixes only, which left
+    listing endpoints, single-resource reads, keyframe delivery, PUT and DELETE
+    with no ceiling at all — enumerating or draining the data cost an attacker
+    nothing.
+    """
+    return request.url.path.startswith(API_PREFIX) or _narrow_limit_applies(request)
+
+
+def _narrow_limit_applies(request: Request) -> bool:
     if request.method not in {"POST", "PATCH"}:
         return False
     return request.url.path in _AUTH_PATHS or any(
@@ -64,12 +78,16 @@ def check_rate_limit(request: Request) -> RateLimitDecision:
     settings = get_settings()
     if not settings.rate_limit_enabled or not rate_limit_applies(request):
         return RateLimitDecision("not_applicable", settings.rate_limit_requests)
-    if request.url.path in _AUTH_PATHS:
-        limit = settings.auth_rate_limit_requests
-        window = settings.auth_rate_limit_window_seconds
+    if _narrow_limit_applies(request):
+        if request.url.path in _AUTH_PATHS:
+            limit = settings.auth_rate_limit_requests
+            window = settings.auth_rate_limit_window_seconds
+        else:
+            limit = settings.rate_limit_requests
+            window = settings.rate_limit_window_seconds
     else:
-        limit = settings.rate_limit_requests
-        window = settings.rate_limit_window_seconds
+        limit = settings.api_rate_limit_requests
+        window = settings.api_rate_limit_window_seconds
     try:
         return _consume_bucket_with_retry(
             settings.rate_limit_database_path,
@@ -79,6 +97,7 @@ def check_rate_limit(request: Request) -> RateLimitDecision:
             cleanup_window_seconds=max(
                 settings.rate_limit_window_seconds,
                 settings.auth_rate_limit_window_seconds,
+                settings.api_rate_limit_window_seconds,
             ),
         )
     except (OSError, sqlite3.Error, ValueError):
@@ -229,4 +248,8 @@ def _bucket_scope(path: str) -> str:
     for prefix in _EXPENSIVE_PATH_PREFIXES:
         if path.startswith(prefix):
             return prefix
+    # Everything else in the API shares one bucket per client, so the general
+    # ceiling counts total API use rather than use of one endpoint.
+    if path.startswith(API_PREFIX):
+        return API_PREFIX
     return path

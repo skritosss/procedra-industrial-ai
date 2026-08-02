@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_requests: int = Field(default=60, ge=1, le=10_000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    # Coarse ceiling over the whole API, on every method. The narrow limits
+    # below stay on top of it as the stricter rule.
+    api_rate_limit_requests: int = Field(default=300, ge=10, le=100_000)
+    api_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     auth_rate_limit_requests: int = Field(default=10, ge=1, le=1000)
     auth_rate_limit_window_seconds: int = Field(default=300, ge=1, le=3600)
     trust_proxy_headers: bool = False

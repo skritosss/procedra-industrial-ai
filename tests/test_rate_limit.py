@@ -222,3 +222,66 @@ def test_forwarded_for_skips_further_trusted_proxies(monkeypatch) -> None:
     assert _forwarded_client_ip("198.51.100.77", trusted) == "198.51.100.77"
     assert _forwarded_client_ip("10.0.0.1, 10.0.0.2", trusted) == ""
     assert _forwarded_client_ip("", trusted) == ""
+
+
+def test_read_endpoints_are_covered_by_the_general_api_ceiling(tmp_path, monkeypatch) -> None:
+    limits = tmp_path / "general.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "rate_limit_database_path": limits,
+            "rate_limit_enabled": True,
+            "api_rate_limit_requests": 12,
+            "api_rate_limit_window_seconds": 60,
+        }
+    )
+    monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
+    reset_rate_limit_state(limits)
+    client = TestClient(app)
+
+    statuses = [client.get("/api/documents").status_code for _ in range(16)]
+
+    # GET endpoints had no ceiling at all: listing and draining data was free.
+    assert 429 in statuses
+    assert statuses.count(429) == 4
+
+
+def test_narrow_limits_stay_stricter_than_the_general_ceiling(tmp_path, monkeypatch) -> None:
+    limits = tmp_path / "narrow.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "rate_limit_database_path": limits,
+            "rate_limit_enabled": True,
+            "api_rate_limit_requests": 1000,
+            "auth_rate_limit_requests": 3,
+            "auth_rate_limit_window_seconds": 300,
+        }
+    )
+    monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
+    reset_rate_limit_state(limits)
+    client = TestClient(app)
+
+    statuses = [
+        client.post("/api/auth/login", json={"email": "a@example.com", "password": "x"}).status_code
+        for _ in range(6)
+    ]
+
+    # The general ceiling is generous; it must not relax the login limit.
+    assert statuses.count(429) == 3
+
+
+def test_health_and_static_stay_outside_the_api_ceiling(tmp_path, monkeypatch) -> None:
+    limits = tmp_path / "outside.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "rate_limit_database_path": limits,
+            "rate_limit_enabled": True,
+            "api_rate_limit_requests": 3,
+        }
+    )
+    monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
+    reset_rate_limit_state(limits)
+    client = TestClient(app)
+
+    statuses = [client.get("/health").status_code for _ in range(8)]
+
+    assert set(statuses) == {200}
