@@ -57,6 +57,7 @@ class EndpointResult:
 @dataclass
 class ProbeReport:
     label: str
+    workers: int
     levels: list[int]
     requests_per_level: int
     results: list[EndpointResult]
@@ -80,8 +81,10 @@ def _wait_for(url: str, timeout: float = 60.0) -> None:
     raise RuntimeError(f"Server did not become ready at {url}")
 
 
-def _request(url: str, token: str | None) -> tuple[int, float]:
-    request = urllib.request.Request(url)
+def _request(url: str, token: str | None, body: bytes | None = None) -> tuple[int, float]:
+    request = urllib.request.Request(url, data=body)
+    if body is not None:
+        request.add_header("Content-Type", "application/json")
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     started = time.perf_counter()
@@ -105,10 +108,18 @@ def _percentile(values: list[float], fraction: float) -> float:
     return round(ordered[index], 2)
 
 
-def _measure(url: str, token: str | None, concurrency: int, total: int) -> EndpointResult:
+def _measure(
+    url: str,
+    token: str | None,
+    concurrency: int,
+    total: int,
+    *,
+    name: str | None = None,
+    body: bytes | None = None,
+) -> EndpointResult:
     started = time.perf_counter()
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        outcomes = list(pool.map(lambda _: _request(url, token), range(total)))
+        outcomes = list(pool.map(lambda _: _request(url, token, body), range(total)))
     elapsed = time.perf_counter() - started
 
     statuses = [status for status, _ in outcomes]
@@ -119,7 +130,7 @@ def _measure(url: str, token: str | None, concurrency: int, total: int) -> Endpo
         key = "connection_error" if status == 0 else str(status)
         counts[key] = counts.get(key, 0) + 1
     return EndpointResult(
-        endpoint=url.rsplit("/", 1)[-1] or url,
+        endpoint=name or (url.rsplit("/", 1)[-1] or url),
         concurrency=concurrency,
         requests=total,
         succeeded=succeeded,
@@ -155,7 +166,27 @@ def _register_session(base_url: str) -> str:
     return str(token)
 
 
-def run(label: str, levels: tuple[int, ...], per_level: int) -> ProbeReport:
+def _instruction_payload(base_url: str, token: str) -> bytes:
+    """Generate one instruction and wrap it for repeated saving.
+
+    The read path stopped writing to the database entirely, so a read-only probe
+    can no longer reach the single-writer limit. Saving a version does: it writes
+    the version row and appends a hash-chained audit event, which is the write
+    pattern real use produces.
+    """
+    generate = urllib.request.Request(
+        f"{base_url}/api/instructions/generate",
+        data=json.dumps(
+            {"task": "Подготовить рабочее место оператора перед запуском оборудования"}
+        ).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+    )
+    with urllib.request.urlopen(generate, timeout=60) as response:
+        generated = json.loads(response.read())
+    return json.dumps({"payload": generated}).encode("utf-8")
+
+
+def run(label: str, levels: tuple[int, ...], per_level: int, workers: int = 1) -> ProbeReport:
     port = _free_port()
     base_url = f"http://127.0.0.1:{port}"
     with tempfile.TemporaryDirectory(prefix="procedra-concurrency-") as workdir:
@@ -181,6 +212,8 @@ def run(label: str, levels: tuple[int, ...], per_level: int) -> ProbeReport:
                 str(port),
                 "--log-level",
                 "warning",
+                "--workers",
+                str(workers),
             ],
             cwd=PROJECT_ROOT,
             env=environment,
@@ -190,10 +223,25 @@ def run(label: str, levels: tuple[int, ...], per_level: int) -> ProbeReport:
         try:
             _wait_for(f"{base_url}/health")
             token = _register_session(base_url)
+            save_body = _instruction_payload(base_url, token)
             results: list[EndpointResult] = []
             for concurrency in levels:
-                results.append(_measure(f"{base_url}/api/auth/me", token, concurrency, per_level))
-                results.append(_measure(f"{base_url}/ready", None, concurrency, per_level))
+                results.append(
+                    _measure(f"{base_url}/api/auth/me", token, concurrency, per_level, name="me")
+                )
+                results.append(
+                    _measure(f"{base_url}/ready", None, concurrency, per_level, name="ready")
+                )
+                results.append(
+                    _measure(
+                        f"{base_url}/api/instructions/history",
+                        token,
+                        concurrency,
+                        per_level,
+                        name="save",
+                        body=save_body,
+                    )
+                )
         finally:
             server.terminate()
             try:
@@ -210,6 +258,7 @@ def run(label: str, levels: tuple[int, ...], per_level: int) -> ProbeReport:
             fully_served.setdefault(result.endpoint, 0)
     return ProbeReport(
         label=label,
+        workers=workers,
         levels=list(levels),
         requests_per_level=per_level,
         results=results,
@@ -222,11 +271,12 @@ def main() -> int:
     parser.add_argument("--label", default="unlabelled", help="Name for this run, e.g. before/after.")
     parser.add_argument("--requests", type=int, default=120, help="Requests per concurrency level.")
     parser.add_argument("--levels", default=",".join(str(level) for level in DEFAULT_LEVELS))
+    parser.add_argument("--workers", type=int, default=1, help="uvicorn worker processes.")
     parser.add_argument("--output", type=Path, default=DEFAULT_REPORT)
     args = parser.parse_args()
 
     levels = tuple(int(item) for item in args.levels.split(",") if item.strip())
-    report = run(args.label, levels, args.requests)
+    report = run(args.label, levels, args.requests, args.workers)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     destination = args.output.with_name(f"{args.output.stem}_{report.label}{args.output.suffix}")
@@ -239,7 +289,7 @@ def main() -> int:
             f"{result.requests_per_second:8.1f} {result.latency_p50_ms:9.2f} {result.latency_p95_ms:9.2f}"
             f"  {result.status_counts}"
         )
-    print(f"\nCONCURRENCY_PROBE label={report.label} fully_served={report.max_concurrency_fully_served}")
+    print(f"\nCONCURRENCY_PROBE label={report.label} workers={report.workers} fully_served={report.max_concurrency_fully_served}")
     print(f"report: {destination}")
     return 0
 
