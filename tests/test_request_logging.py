@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 from pathlib import Path
 import subprocess
@@ -74,7 +75,12 @@ def test_request_log_uses_safe_error_categories_and_never_logs_credentials() -> 
     assert response.status_code == 401
     assert len(handler.messages) == 1
     payload = json.loads(handler.messages[-1])
-    assert payload["request_id"] == "[redacted]"
+    # A credential-shaped X-Request-ID no longer reaches the log to be redacted:
+    # the header fails the allowlist at the edge and a generated id is used
+    # instead. Discarding beats redacting — there is nothing left to leak.
+    assert "secret-value" not in handler.messages[-1]
+    assert payload["request_id"] != "Bearer secret-value"
+    assert re.fullmatch(r"[0-9a-f]{32}", payload["request_id"])
     assert payload["route_template"] == "/api/auth/login"
     assert payload["result_category"] == "security_denied"
     assert payload["error_category"] == "unauthorized"
@@ -104,6 +110,9 @@ def test_formatter_whitelists_fields_and_redacts_pii() -> None:
     serialized = formatter.format(record)
     payload = json.loads(serialized)
 
+    # The formatter keeps redacting whatever reaches it. Edge validation stops
+    # a hostile X-Request-ID earlier now, but this layer still covers values that
+    # arrive by any other route.
     assert payload["request_id"] == "[redacted]"
     assert payload["duration_ms"] == 12.346
     assert set(payload) == {
