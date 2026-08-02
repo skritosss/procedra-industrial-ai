@@ -47,7 +47,7 @@ def test_dockerfile_uses_non_root_runtime_and_healthcheck() -> None:
     assert "COPY scripts/run_video_job_worker.py ./scripts/run_video_job_worker.py" in dockerfile
     assert "USER appuser" in dockerfile
     assert "HEALTHCHECK" in dockerfile
-    assert "urllib.request.urlopen('http://127.0.0.1:8000/ready'" in dockerfile
+    assert "urllib.request.urlopen('http://127.0.0.1:8000/health'" in dockerfile
 
 
 def test_dockerignore_excludes_secrets_and_runtime_artifacts() -> None:
@@ -125,7 +125,7 @@ def test_compose_defaults_to_deterministic_demo_mode_and_persistent_volumes() ->
     assert "- generated-data:/app/generated" in compose
     assert "- upload-data:/app/uploads" in compose
     assert "healthcheck:" in compose
-    assert "urllib.request.urlopen('http://127.0.0.1:8000/ready'" in compose
+    assert "urllib.request.urlopen('http://127.0.0.1:8000/health'" in compose
     assert "restart: unless-stopped" in compose
 
 

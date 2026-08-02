@@ -17,6 +17,7 @@ from app.schemas.auth import UserPublic, UserRole
 from app.storage.database import (
     apply_migrations,
     connect_database,
+    database_is_available,
     database_is_healthy,
     database_is_read_only_ready,
 )
@@ -313,6 +314,10 @@ def database_is_ready(database_path: Path | None = None) -> bool:
 
 def database_is_read_only(database_path: Path | None = None) -> bool:
     return database_is_read_only_ready(database_path or get_settings().database_path)
+
+
+def database_is_present(database_path: Path | None = None) -> bool:
+    return database_is_available(database_path or get_settings().database_path)
 
 
 def _connect(database_path: Path | None = None) -> sqlite3.Connection:

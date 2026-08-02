@@ -155,6 +155,32 @@ def database_is_healthy(database_path: Path | None = None) -> bool:
         return False
 
 
+def database_is_available(database_path: Path | None = None) -> bool:
+    """Cheap liveness check for an already initialized database.
+
+    Answers only "is the expected database there and at the schema this build
+    understands". Deliberately does not run `PRAGMA integrity_check` and does not
+    recompute the audit hash chains: those are proportional to the whole database
+    and to the entire audit history, so an unauthenticated caller could make the
+    service do unbounded work, and the cost grows the longer the system runs.
+
+    The deep verification lives in `database_is_read_only_ready`, reached through
+    the authenticated `/ready/details` and `scripts/manage_database.py verify`.
+    """
+    path = (database_path or get_settings().database_path).resolve()
+    if not path.is_file():
+        return False
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations"
+            ).fetchone()
+            return int(row["version"] if row is not None else 0) == CURRENT_SCHEMA_VERSION
+    except (OSError, sqlite3.Error):
+        return False
+
+
 def database_is_read_only_ready(database_path: Path | None = None) -> bool:
     """Verify an already initialized database without creating or migrating it."""
     path = (database_path or get_settings().database_path).resolve()

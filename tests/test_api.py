@@ -423,7 +423,7 @@ def test_public_metrics_flag_cannot_bypass_production_observability_auth(tmp_pat
 
 
 def test_ready_endpoint_reports_degraded_when_database_check_fails(monkeypatch) -> None:
-    monkeypatch.setattr("app.storage.auth_store.database_is_read_only", lambda database_path=None: False)
+    monkeypatch.setattr("app.storage.auth_store.database_is_present", lambda database_path=None: False)
     client = TestClient(app)
 
     response = client.get("/ready")
@@ -1453,3 +1453,44 @@ def test_hsts_is_sent_only_in_production(tmp_path, monkeypatch) -> None:
     production = TestClient(app, base_url="https://testserver").get("/health")
 
     assert production.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
+
+
+def test_ready_does_not_run_the_deep_database_verification(monkeypatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.storage.auth_store.database_is_read_only",
+        lambda database_path=None: calls.append("deep") or True,
+    )
+    client = TestClient(app)
+
+    response = client.get("/ready")
+
+    # /ready is unauthenticated and not rate limited. A full integrity check plus
+    # a recomputation of every audit hash chain is unbounded work for an
+    # anonymous caller, and it grows with the audit trail.
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+    assert calls == []
+
+
+def test_ready_details_runs_the_deep_database_verification(tmp_path, monkeypatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app.storage.auth_store.database_is_read_only",
+        lambda database_path=None: calls.append("deep") or True,
+    )
+    settings = get_settings().model_copy(
+        update={"api_access_token": "observability-token", "allow_unauthenticated_access": False}
+    )
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    client = TestClient(app)
+
+    response = client.get(
+        "/ready/details",
+        headers={"Authorization": "Bearer observability-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["verification_depth"] == "deep"
+    assert calls == ["deep"]

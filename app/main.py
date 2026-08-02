@@ -280,7 +280,11 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready(response: Response) -> dict[str, object]:
-    details = _readiness_details()
+    # Unauthenticated and not rate limited, so this path must stay cheap and
+    # bounded. It used to run a full integrity check and recompute every audit
+    # hash chain, which is work proportional to the whole database and grows for
+    # as long as the system is in use.
+    details = _readiness_details(deep=False)
     if details["status"] == "degraded":
         response.status_code = 503
     return {"status": details["status"]}
@@ -290,14 +294,14 @@ def ready(response: Response) -> dict[str, object]:
 def ready_details(request: Request, response: Response) -> dict[str, object]:
     if not _has_observability_access(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
-    details = _readiness_details()
+    details = _readiness_details(deep=True)
     if details["status"] == "degraded":
         response.status_code = 503
     return details
 
 
-def _readiness_details() -> dict[str, object]:
-    from app.storage.auth_store import database_is_read_only
+def _readiness_details(*, deep: bool) -> dict[str, object]:
+    from app.storage.auth_store import database_is_present, database_is_read_only
     from app.storage.metrics_store import metrics_store_is_read_only_ready
 
     settings = get_settings()
@@ -307,8 +311,13 @@ def _readiness_details() -> dict[str, object]:
     uploads_writable = _is_writable_directory(UPLOADS_DIR)
     documents_writable = _is_writable_directory(DOCUMENTS_DIR)
     database_parent_writable = _is_writable_directory(settings.database_path.parent)
-    database_ready = database_parent_writable and database_is_read_only(settings.database_path)
-    metrics_database_ready = metrics_store_is_read_only_ready(settings.metrics_database_path)
+    database_check = database_is_read_only if deep else database_is_present
+    database_ready = database_parent_writable and database_check(settings.database_path)
+    metrics_database_ready = (
+        metrics_store_is_read_only_ready(settings.metrics_database_path)
+        if deep
+        else settings.metrics_database_path.is_file()
+    )
     readiness_status = (
         "ready"
         if generated_writable
@@ -348,6 +357,7 @@ def _readiness_details() -> dict[str, object]:
         "database_parent_writable": database_parent_writable,
         "database_ready": database_ready,
         "metrics_database_ready": metrics_database_ready,
+        "verification_depth": "deep" if deep else "shallow",
     }
 
 
