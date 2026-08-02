@@ -149,3 +149,76 @@ def test_rate_limit_events_do_not_touch_the_business_database(tmp_path, monkeypa
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
     assert "rate_limit_events" not in tables
+
+
+def _login_statuses(client: TestClient, forwarded: list[str]) -> list[int]:
+    return [
+        client.post(
+            "/api/auth/login",
+            json={"email": "victim@example.com", "password": "guess"},
+            headers={"X-Forwarded-For": value},
+        ).status_code
+        for value in forwarded
+    ]
+
+
+def test_forwarded_for_cannot_buy_a_fresh_rate_limit_bucket(tmp_path, monkeypatch) -> None:
+    limits = tmp_path / "xff.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "rate_limit_database_path": limits,
+            "rate_limit_enabled": True,
+            "trust_proxy_headers": True,
+            "trusted_proxy_ips": ("127.0.0.1",),
+        }
+    )
+    monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
+    limit = settings.auth_rate_limit_requests
+    attacker = "198.51.100.77"
+    # A trusted reverse proxy appends the address that connected to it, so the
+    # rightmost element is the only one the attacker cannot choose. Everything to
+    # its left is attacker-supplied.
+    rotating = [f"203.0.113.{index % 250}, {attacker}" for index in range(limit + 5)]
+
+    reset_rate_limit_state(limits)
+    client = TestClient(app, client=("127.0.0.1", 40000))
+    statuses = _login_statuses(client, rotating)
+
+    # Reading the header left to right handed out a new bucket per request, which
+    # left password guessing on /api/auth/login entirely unlimited.
+    assert 429 in statuses
+    assert statuses.count(429) == len(statuses) - limit
+
+
+def test_forwarded_for_falls_back_to_the_peer_when_the_chain_is_malformed(tmp_path, monkeypatch) -> None:
+    limits = tmp_path / "xff-bad.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "rate_limit_database_path": limits,
+            "rate_limit_enabled": True,
+            "trust_proxy_headers": True,
+            "trusted_proxy_ips": ("127.0.0.1",),
+        }
+    )
+    monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
+    limit = settings.auth_rate_limit_requests
+    garbage = [f"not-an-ip-{index}" for index in range(limit + 5)]
+
+    reset_rate_limit_state(limits)
+    client = TestClient(app, client=("127.0.0.1", 40000))
+    statuses = _login_statuses(client, garbage)
+
+    # A chain that cannot be parsed is a chain that cannot be trusted; the peer
+    # address is the safe answer and it is constant.
+    assert 429 in statuses
+
+
+def test_forwarded_for_skips_further_trusted_proxies(monkeypatch) -> None:
+    from app.core.rate_limit import _forwarded_client_ip
+
+    trusted = ("127.0.0.1", "10.0.0.1", "10.0.0.2")
+
+    assert _forwarded_client_ip("203.0.113.9, 198.51.100.77, 10.0.0.2", trusted) == "198.51.100.77"
+    assert _forwarded_client_ip("198.51.100.77", trusted) == "198.51.100.77"
+    assert _forwarded_client_ip("10.0.0.1, 10.0.0.2", trusted) == ""
+    assert _forwarded_client_ip("", trusted) == ""

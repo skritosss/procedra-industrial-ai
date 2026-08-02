@@ -186,15 +186,41 @@ def _client_key(request: Request) -> str:
     client_ip = ""
     peer_ip = request.client.host if request.client else ""
     if settings.trust_proxy_headers and peer_ip in settings.trusted_proxy_ips:
-        forwarded_for = request.headers.get("X-Forwarded-For", "")
-        candidate = forwarded_for.split(",", 1)[0].strip()
-        try:
-            client_ip = str(ip_address(candidate))
-        except ValueError:
-            client_ip = ""
+        client_ip = _forwarded_client_ip(
+            request.headers.get("X-Forwarded-For", ""),
+            settings.trusted_proxy_ips,
+        )
     if not client_ip:
         client_ip = peer_ip
     return f"{client_ip or 'unknown'}:{_bucket_scope(request.url.path)}"
+
+
+def _forwarded_client_ip(header: str, trusted_proxies: tuple[str, ...]) -> str:
+    """Take the first address the trusted proxy chain did not vouch for.
+
+    Reading `X-Forwarded-For` left to right takes the element the *client*
+    writes: a proxy only appends its own view of the peer on the right. Anyone
+    could therefore send a random address and be given a fresh rate-limit bucket
+    for every request, which removed the only protection the login endpoint had
+    against password guessing.
+
+    Walking from the right skips the addresses our own trusted proxies added and
+    stops at the first one they did not, which is the furthest point the chain
+    still attests to. Anything malformed ends the walk: a chain we cannot parse
+    is a chain we cannot trust, and falling back to the peer address is the safe
+    answer.
+    """
+    for raw in reversed(header.split(",")):
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        try:
+            address = str(ip_address(candidate))
+        except ValueError:
+            return ""
+        if address not in trusted_proxies:
+            return address
+    return ""
 
 
 def _bucket_scope(path: str) -> str:
