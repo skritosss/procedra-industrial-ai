@@ -1537,3 +1537,42 @@ def test_rate_limit_does_not_retry_unrelated_database_errors(monkeypatch) -> Non
 
     assert response.status_code == 503
     assert len(attempts) == 1
+
+
+def test_request_id_rejects_control_characters() -> None:
+    client = TestClient(app)
+
+    hostile = client.get("/health", headers={"X-Request-ID": "abc\tdef\x1b[31m"})
+    accepted = client.get("/health", headers={"X-Request-ID": "trace-01.abc_DEF"})
+
+    # The value is echoed back and written into the structured log, where an
+    # escape sequence stops being text.
+    assert hostile.headers["X-Request-ID"] != "abc\tdef\x1b[31m"
+    assert "\x1b" not in hostile.headers["X-Request-ID"]
+    assert accepted.headers["X-Request-ID"] == "trace-01.abc_DEF"
+
+
+def test_legacy_keyframe_read_without_session_is_demo_only(tmp_path, monkeypatch) -> None:
+    video_id = "0" * 32
+    path = f"/generated/keyframes/{video_id}/frame_01.jpg"
+
+    demo = TestClient(app).get(path)
+
+    settings = get_settings().model_copy(
+        update={
+            "deployment_mode": "production",
+            "api_access_token": "production-bootstrap-token-at-least-32-chars",
+            "allow_unauthenticated_access": False,
+            "database_path": tmp_path / "kf.sqlite3",
+            "metrics_database_path": tmp_path / "kf-metrics.sqlite3",
+            "rate_limit_database_path": tmp_path / "kf-limits.sqlite3",
+        }
+    )
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.security.get_settings", lambda: settings)
+    production = TestClient(app).get(path)
+
+    # Demo keeps the walkthrough working; a delivered installation must not serve
+    # frames to anyone who can guess a video id.
+    assert demo.status_code == 404
+    assert production.status_code == 401

@@ -52,6 +52,7 @@ INSTRUCTIONS_DIR = GENERATED_DIR / "instructions"
 UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
 DOCUMENTS_DIR = UPLOADS_DIR / "documents"
 MAX_REQUEST_ID_LENGTH = 128
+REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "
     "base-uri 'none'; "
@@ -191,11 +192,19 @@ async def add_security_headers(request: Request, call_next):
 
 
 def _safe_request_id(header_value: str | None) -> str:
+    """Accept a caller-supplied request id only if it is inert.
+
+    The value is echoed in the response header and written into the structured
+    log. Rejecting just CR and LF left tabs, NUL bytes and ANSI escape sequences
+    to travel into whatever reads those logs, where an escape sequence is not
+    text but an instruction. An allowlist is the only form of this check that
+    does not need updating every time a new terminal capability shows up.
+    """
     if not header_value:
         return _random_hex()
     if len(header_value) > MAX_REQUEST_ID_LENGTH:
         return _random_hex()
-    if any(char in header_value for char in ("\r", "\n")):
+    if not REQUEST_ID_PATTERN.fullmatch(header_value):
         return _random_hex()
     return header_value
 
@@ -247,7 +256,14 @@ def _keyframe_response(request: Request, organization_id: str, video_id: str, fi
         raise HTTPException(status_code=404, detail="Keyframe not found")
     settings = get_settings()
     context = require_permission(request, "video:read", settings)
-    if context.user is None and organization_id != LEGACY_ORGANIZATION_ID:
+    # Unauthenticated keyframe reads exist for the demo walkthrough, where the
+    # only protection is the 32 hex characters of video_id — a capability URL,
+    # and an undocumented access model. Confining it to demo mode keeps the
+    # walkthrough working and makes a delivered installation require a session.
+    legacy_demo_read = (
+        settings.deployment_mode == "demo" and organization_id == LEGACY_ORGANIZATION_ID
+    )
+    if context.user is None and not legacy_demo_read:
         raise HTTPException(status_code=401, detail="Authenticated user session is required for keyframes")
     if context.organization_id != organization_id:
         raise HTTPException(status_code=404, detail="Keyframe not found")
