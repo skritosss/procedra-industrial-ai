@@ -18,6 +18,8 @@ import os
 from pathlib import Path
 import sqlite3
 
+from app.storage.database import enable_wal
+
 RATE_LIMIT_SCHEMA_VERSION = 1
 
 
@@ -26,7 +28,9 @@ def connect_rate_limit_store(database_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(database_path, timeout=10.0)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout = 10000")
-    connection.execute("PRAGMA journal_mode = WAL")
+    # Shared with the business database on purpose: a concurrency fix that
+    # exists in two copies gets fixed in one of them.
+    enable_wal(connection)
     return connection
 
 
@@ -62,6 +66,13 @@ def rate_limit_store_is_ready(database_path: Path) -> bool:
 
 
 def _apply_schema(connection: sqlite3.Connection) -> None:
+    # Take the write lock up front. Several worker processes reach this at the
+    # same time on first start, and a deferred transaction that only upgrades to
+    # a writer once it hits the first CREATE fails outright with
+    # "database is locked" — busy_timeout does not arbitrate that conflict in WAL
+    # mode. BEGIN IMMEDIATE is a conflict busy_timeout does wait on, so the
+    # processes queue instead of one of them dying.
+    connection.execute("BEGIN IMMEDIATE")
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS rate_limit_schema (

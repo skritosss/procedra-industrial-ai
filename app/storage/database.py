@@ -36,7 +36,7 @@ def connect_database(database_path: Path | None = None) -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout = 10000")
     connection.execute("PRAGMA foreign_keys = ON")
-    _enable_wal(connection)
+    enable_wal(connection)
     return connection
 
 
@@ -555,7 +555,14 @@ def _verify_authorization_integrity(connection: sqlite3.Connection) -> None:
             raise ValueError("Admin audit event details are invalid")
 
 
-def _enable_wal(connection: sqlite3.Connection) -> None:
+def enable_wal(connection: sqlite3.Connection) -> None:
+    """Switch the database to WAL, waiting out a concurrent switch.
+
+    The journal mode is a property of the file, so several processes starting at
+    once all try to set it and all but one can be refused outright with
+    "database is locked" — busy_timeout does not arbitrate this one. Whoever wins
+    sets it permanently; the rest only have to wait for that to land.
+    """
     for attempt in range(20):
         try:
             connection.execute("PRAGMA journal_mode = WAL")
