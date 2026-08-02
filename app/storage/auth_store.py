@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
-from app.core.settings import get_settings
+from app.core.settings import Settings, get_settings
 from app.core.organization import LEGACY_ORGANIZATION_ID
 from app.core.authorization import default_project_id
 from app.schemas.auth import UserPublic, UserRole
@@ -185,7 +185,7 @@ def get_user_by_token(token: str, database_path: Path | None = None) -> UserPubl
         _ensure_schema(connection)
         row = connection.execute(
             """
-            SELECT users.*
+            SELECT users.*, auth_sessions.last_seen_at AS session_last_seen_at
             FROM auth_sessions
             JOIN users ON users.user_id = auth_sessions.user_id
             WHERE auth_sessions.token_hash = ?
@@ -196,7 +196,13 @@ def get_user_by_token(token: str, database_path: Path | None = None) -> UserPubl
             """,
             (_hash_token(token), now.isoformat(), idle_cutoff.isoformat()),
         ).fetchone()
-        if row is not None:
+        if row is not None and _last_seen_is_stale(row, now, settings):
+            # Refresh the idle timer only once it has actually aged. This used to
+            # run on every authenticated request: a write transaction per request
+            # for a field whose only consumer is the idle-timeout comparison.
+            # The staleness test uses the value already returned above, so the
+            # common request issues no write statement at all rather than an
+            # UPDATE that matches nothing — an UPDATE still takes a write lock.
             connection.execute(
                 "UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?",
                 (now.isoformat(), _hash_token(token)),
@@ -318,6 +324,29 @@ def _begin_immediate(connection: sqlite3.Connection) -> None:
     if connection.in_transaction:
         connection.commit()
     connection.execute("BEGIN IMMEDIATE")
+
+
+def _last_seen_is_stale(row: sqlite3.Row, now: datetime, settings: Settings) -> bool:
+    recorded = str(row["session_last_seen_at"] or "")
+    if not recorded:
+        return True
+    try:
+        last_seen = datetime.fromisoformat(recorded)
+    except ValueError:
+        return True
+    if last_seen.tzinfo is None:
+        last_seen = last_seen.replace(tzinfo=UTC)
+    return (now - last_seen).total_seconds() >= _last_seen_refresh_seconds(settings)
+
+
+def _last_seen_refresh_seconds(settings: Settings) -> int:
+    """How stale `last_seen_at` may get before it is written again.
+
+    Kept well below the idle timeout so a session is never dropped for looking
+    idle when it is not: at a tenth of the timeout the recorded value trails
+    reality by at most 10% of the window that decides expiry.
+    """
+    return max(1, settings.auth_session_idle_timeout_seconds // 10)
 
 
 def _ensure_schema(connection: sqlite3.Connection) -> None:

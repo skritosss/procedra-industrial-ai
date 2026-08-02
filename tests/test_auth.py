@@ -1,7 +1,7 @@
 import hashlib
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +12,7 @@ from app.core import rate_limit
 from app.core.organization import organization_storage_path
 from app.main import app
 from app.storage import auth_store
+from app.storage.database import connect_database
 from app.storage.auth_store import (
     authenticate_user,
     create_bootstrap_user,
@@ -688,3 +689,66 @@ def test_auth_login_endpoint_has_dedicated_rate_limit(tmp_path, monkeypatch) -> 
     assert first.status_code == 401
     assert second.status_code == 429
     rate_limit.reset_rate_limit_state()
+
+
+def _session_last_seen(database_path, token) -> str:
+    from app.storage.auth_store import _hash_token
+
+    with connect_database(database_path) as connection:
+        row = connection.execute(
+            "SELECT last_seen_at FROM auth_sessions WHERE token_hash = ?",
+            (_hash_token(token),),
+        ).fetchone()
+    return str(row["last_seen_at"])
+
+
+def test_session_last_seen_is_not_rewritten_on_every_request(tmp_path) -> None:
+    database_path = tmp_path / "last-seen.sqlite3"
+    user = create_user(
+        email="idle@example.com",
+        full_name="Оператор",
+        password="strong-password-1",
+        role="operator",
+        database_path=database_path,
+    )
+    token = create_session(user.user_id, database_path=database_path)
+
+    assert get_user_by_token(token, database_path=database_path) is not None
+    first = _session_last_seen(database_path, token)
+    for _ in range(5):
+        assert get_user_by_token(token, database_path=database_path) is not None
+
+    # Writing this field on every request cost a write transaction per
+    # authenticated request, and SQLite allows one writer at a time.
+    assert _session_last_seen(database_path, token) == first
+
+
+def test_session_last_seen_is_refreshed_once_it_ages(tmp_path) -> None:
+    database_path = tmp_path / "aged.sqlite3"
+    user = create_user(
+        email="aged@example.com",
+        full_name="Оператор",
+        password="strong-password-1",
+        role="operator",
+        database_path=database_path,
+    )
+    token = create_session(user.user_id, database_path=database_path)
+    assert get_user_by_token(token, database_path=database_path) is not None
+
+    from app.storage.auth_store import _hash_token
+
+    settings = get_settings()
+    aged = datetime.now(UTC) - timedelta(seconds=settings.auth_session_idle_timeout_seconds // 2)
+    with connect_database(database_path) as connection:
+        connection.execute(
+            "UPDATE auth_sessions SET last_seen_at = ? WHERE token_hash = ?",
+            (aged.isoformat(), _hash_token(token)),
+        )
+        connection.commit()
+
+    stale = _session_last_seen(database_path, token)
+    assert get_user_by_token(token, database_path=database_path) is not None
+
+    # The idle timeout still has to work: once the recorded value is old enough,
+    # the next authenticated request refreshes it.
+    assert _session_last_seen(database_path, token) != stale
