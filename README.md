@@ -230,6 +230,12 @@ public-safe feedback and pilot-conversation drafts.
 
 ## Research artifact
 
+**Published working paper.** Shuvalov, Aleksander. Procedra: A Source-Supported Software Artifact for Human-in-the-Loop Industrial AI. SSRN, 22 July 2026.
+
+https://ssrn.com/abstract=7026918 — DOI: 10.2139/ssrn.7026918
+
+The paper describes the artifact, the source-supported drafting workflow pattern, and an evidence protocol that separates repository-confirmed implementation evidence from customer, field, safety, and compliance validation. Appendix A maps every claim in the paper to its evidence status and the source file that supports it.
+
 Procedra is also packaged as a research-informed software artifact for human-in-the-loop industrial AI. The current working paper and SSRN submission materials are kept under [`docs/research/`](docs/research/):
 
 - [`procedra_ssrn_working_paper.md`](docs/research/procedra_ssrn_working_paper.md) — working paper source.
