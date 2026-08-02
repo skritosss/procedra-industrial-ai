@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     auth_session_retention_seconds: int = Field(default=604_800, ge=3_600, le=31_536_000)
     auth_invitation_ttl_seconds: int = Field(default=259_200, ge=300, le=2_592_000)
     auth_max_active_sessions: int = Field(default=10, ge=1, le=100)
+    # Per-account brute-force wall. The IP rate limit is per address, so it does
+    # not stop a distributed attempt against one account.
+    auth_max_failed_attempts: int = Field(default=10, ge=3, le=100)
+    # Deliberately temporary. A permanent lock would let anyone who knows an
+    # email address disable that person indefinitely.
+    auth_lockout_seconds: int = Field(default=900, ge=30, le=86_400)
     rate_limit_enabled: bool = True
     rate_limit_requests: int = Field(default=60, ge=1, le=10_000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)

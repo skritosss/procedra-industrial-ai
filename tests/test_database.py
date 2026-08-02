@@ -147,6 +147,7 @@ def test_versioned_migrations_create_transactional_lifecycle_schema(tmp_path) ->
         (8, "admin_audit_hash_chain"),
         (9, "session_idle_tracking"),
         (10, "durable_video_jobs"),
+        (11, "login_lockout"),
     ]
     assert {
         "instruction_versions",

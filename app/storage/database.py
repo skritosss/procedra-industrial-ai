@@ -14,7 +14,7 @@ from typing import Callable, Literal
 from app.core.settings import get_settings
 
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 LEGACY_ORGANIZATION_ID = "legacy"
 LEGACY_ORGANIZATION_NAME = "Legacy Demo Organization"
 Migration = tuple[int, str, Callable[[sqlite3.Connection, int], None]]
@@ -985,6 +985,23 @@ def _migration_session_idle_tracking(connection: sqlite3.Connection, _: int) -> 
     connection.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_last_seen ON auth_sessions(last_seen_at)")
 
 
+def _migration_login_lockout(connection: sqlite3.Connection, _: int) -> None:
+    """Track failed sign-in attempts so brute force meets a second wall.
+
+    The IP rate limit was the only obstacle to password guessing, and it is per
+    address: anyone with a botnet, or a proxy header the deployment trusts, gets
+    an unlimited number of attempts against one account. This counter is per
+    account and therefore does not care where the attempts come from.
+    """
+    columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(users)").fetchall()}
+    if "failed_login_attempts" not in columns:
+        connection.execute(
+            "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0"
+        )
+    if "locked_until" not in columns:
+        connection.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
+
+
 def _migration_durable_video_jobs(connection: sqlite3.Connection, _: int) -> None:
     connection.execute(
         """
@@ -1185,4 +1202,5 @@ MIGRATIONS: tuple[Migration, ...] = (
     (8, "admin_audit_hash_chain", _migration_admin_audit_hash_chain),
     (9, "session_idle_tracking", _migration_session_idle_tracking),
     (10, "durable_video_jobs", _migration_durable_video_jobs),
+    (11, "login_lockout", _migration_login_lockout),
 )

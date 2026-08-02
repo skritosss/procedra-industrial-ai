@@ -752,3 +752,119 @@ def test_session_last_seen_is_refreshed_once_it_ages(tmp_path) -> None:
     # The idle timeout still has to work: once the recorded value is old enough,
     # the next authenticated request refreshes it.
     assert _session_last_seen(database_path, token) != stale
+
+
+def test_repeated_failures_lock_the_account_regardless_of_source_address(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "lockout.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "auth_max_failed_attempts": 4,
+            "auth_lockout_seconds": 900,
+        }
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    create_user(
+        email="target@example.com",
+        full_name="Оператор",
+        password="strong-password-1",
+        role="operator",
+        database_path=database_path,
+    )
+
+    for _ in range(4):
+        assert authenticate_user("target@example.com", "wrong", database_path=database_path) is None
+
+    # The IP rate limit is per address and cannot stop a distributed attempt
+    # against one account. This wall is per account, so the origin is irrelevant.
+    assert authenticate_user("target@example.com", "strong-password-1", database_path=database_path) is None
+
+
+def test_lockout_expires_and_does_not_disable_the_account_permanently(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "lockout-expiry.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "auth_max_failed_attempts": 3,
+            "auth_lockout_seconds": 900,
+        }
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    user = create_user(
+        email="expiring@example.com",
+        full_name="Оператор",
+        password="strong-password-1",
+        role="operator",
+        database_path=database_path,
+    )
+    for _ in range(3):
+        authenticate_user("expiring@example.com", "wrong", database_path=database_path)
+    assert authenticate_user("expiring@example.com", "strong-password-1", database_path=database_path) is None
+
+    past = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+    with connect_database(database_path) as connection:
+        connection.execute("UPDATE users SET locked_until = ? WHERE user_id = ?", (past, user.user_id))
+        connection.commit()
+
+    # A permanent lock would let anyone who knows the address disable that person
+    # for good, which trades one denial of service for another.
+    assert authenticate_user("expiring@example.com", "strong-password-1", database_path=database_path) is not None
+
+
+def test_successful_sign_in_clears_the_failure_counter(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "lockout-reset.sqlite3"
+    settings = get_settings().model_copy(
+        update={"database_path": database_path, "auth_max_failed_attempts": 5}
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    user = create_user(
+        email="reset@example.com",
+        full_name="Оператор",
+        password="strong-password-1",
+        role="operator",
+        database_path=database_path,
+    )
+    for _ in range(3):
+        authenticate_user("reset@example.com", "wrong", database_path=database_path)
+
+    assert authenticate_user("reset@example.com", "strong-password-1", database_path=database_path) is not None
+
+    with connect_database(database_path) as connection:
+        attempts = connection.execute(
+            "SELECT failed_login_attempts FROM users WHERE user_id = ?", (user.user_id,)
+        ).fetchone()["failed_login_attempts"]
+    assert attempts == 0
+
+
+def test_locked_account_is_indistinguishable_from_a_missing_one(tmp_path, monkeypatch) -> None:
+    database_path = tmp_path / "enumeration.sqlite3"
+    settings = get_settings().model_copy(
+        update={"database_path": database_path, "auth_max_failed_attempts": 2}
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    create_user(
+        email="known@example.com",
+        full_name="Оператор",
+        password="strong-password-1",
+        role="operator",
+        database_path=database_path,
+    )
+    for _ in range(2):
+        authenticate_user("known@example.com", "wrong", database_path=database_path)
+
+    calls: list[str] = []
+    original_verify = auth_store._verify_password
+
+    def counting(password: str, stored_hash: str) -> bool:
+        calls.append(stored_hash)
+        return original_verify(password, stored_hash)
+
+    monkeypatch.setattr(auth_store, "_verify_password", counting)
+
+    locked = authenticate_user("known@example.com", "strong-password-1", database_path=database_path)
+    missing = authenticate_user("nobody@example.com", "strong-password-1", database_path=database_path)
+
+    # Both return None, and both pay for a password verification. Returning early
+    # for either would make the two tellable apart by response time.
+    assert locked is None and missing is None
+    assert len(calls) == 2

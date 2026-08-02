@@ -84,17 +84,78 @@ def create_organization(name: str, database_path: Path | None = None) -> str:
 
 
 def authenticate_user(email: str, password: str, database_path: Path | None = None) -> UserPublic | None:
+    settings = get_settings()
+    now = datetime.now(UTC)
     with _connect(database_path) as connection:
         _ensure_schema(connection)
         row = connection.execute(
             "SELECT * FROM users WHERE email = ? AND is_active = 1",
             (_normalize_email(email),),
         ).fetchone()
+
+    # Verification always runs, for a missing account, a wrong password and a
+    # locked account alike. Skipping it for any of those would make the three
+    # distinguishable by response time, which is how account enumeration works.
     stored_hash = DUMMY_PASSWORD_HASH if row is None else str(row["password_hash"])
     password_matches = _verify_password(password, stored_hash)
-    if row is None or not password_matches:
+    locked = row is not None and _lockout_is_active(row, now)
+
+    if row is None:
         return None
+    if not password_matches:
+        _register_failed_login(row, now, settings, database_path)
+        return None
+    if locked:
+        # The password was right, but the account is serving a lockout. Saying so
+        # would confirm the password to whoever triggered the lockout.
+        return None
+    _clear_failed_logins(row, database_path)
     return _user_from_row(row)
+
+
+def _lockout_is_active(row: sqlite3.Row, now: datetime) -> bool:
+    recorded = str(row["locked_until"] or "")
+    if not recorded:
+        return False
+    try:
+        locked_until = datetime.fromisoformat(recorded)
+    except ValueError:
+        return False
+    if locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=UTC)
+    return locked_until > now
+
+
+def _register_failed_login(
+    row: sqlite3.Row,
+    now: datetime,
+    settings: Settings,
+    database_path: Path | None,
+) -> None:
+    attempts = int(row["failed_login_attempts"] or 0) + 1
+    locked_until: str | None = None
+    if attempts >= settings.auth_max_failed_attempts:
+        locked_until = (now + timedelta(seconds=settings.auth_lockout_seconds)).isoformat()
+        attempts = 0
+    with _connect(database_path) as connection:
+        connection.execute(
+            "UPDATE users SET failed_login_attempts = ?, locked_until = ? WHERE user_id = ?",
+            (attempts, locked_until, str(row["user_id"])),
+        )
+        connection.commit()
+
+
+def _clear_failed_logins(row: sqlite3.Row, database_path: Path | None) -> None:
+    # Guarded so an ordinary sign-in does not write. Most sign-ins succeed with
+    # the counter already at zero, and SQLite allows one writer.
+    if not int(row["failed_login_attempts"] or 0) and not str(row["locked_until"] or ""):
+        return
+    with _connect(database_path) as connection:
+        connection.execute(
+            "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?",
+            (str(row["user_id"]),),
+        )
+        connection.commit()
 
 
 def create_session(
