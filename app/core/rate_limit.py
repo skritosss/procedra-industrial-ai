@@ -4,7 +4,8 @@ import hashlib
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from time import time
+from random import random
+from time import sleep, time
 from typing import Literal
 from ipaddress import ip_address
 
@@ -23,6 +24,8 @@ _EXPENSIVE_PATH_PREFIXES = (
     "/api/documents/upload",
 )
 _AUTH_PATHS = {"/api/auth/register", "/api/auth/login", "/api/auth/invitations/accept"}
+_LOCK_RETRY_ATTEMPTS = 3
+_LOCK_RETRY_BASE_SECONDS = 0.02
 RateLimitStatus = Literal["allowed", "limited", "unavailable", "not_applicable"]
 
 
@@ -64,7 +67,7 @@ def check_rate_limit(request: Request) -> RateLimitDecision:
         limit = settings.rate_limit_requests
         window = settings.rate_limit_window_seconds
     try:
-        return _consume_bucket(
+        return _consume_bucket_with_retry(
             settings.database_path,
             _bucket_hash(_client_key(request)),
             limit=limit,
@@ -76,6 +79,52 @@ def check_rate_limit(request: Request) -> RateLimitDecision:
         )
     except (OSError, sqlite3.Error, ValueError):
         return RateLimitDecision("unavailable", 0)
+
+
+def _is_contention_error(error: sqlite3.Error) -> bool:
+    message = str(error).lower()
+    return "database is locked" in message or "database table is locked" in message or "busy" in message
+
+
+def _consume_bucket_with_retry(
+    database_path: Path,
+    bucket_hash: str,
+    *,
+    limit: int,
+    window_seconds: int,
+    cleanup_window_seconds: int,
+) -> RateLimitDecision:
+    """Retry briefly when the write lock is contended.
+
+    `check_rate_limit` turns any `sqlite3.Error` into a 503. But
+    `database is locked` is also a `sqlite3.Error`, so contention on the limiter
+    surfaced to the user as the service being unavailable — a refusal caused by
+    bookkeeping rather than by anything about their request.
+
+    `busy_timeout` on the connection is the first line of defence; this covers
+    the conflicts it does not arbitrate, notably a write-write collision in WAL
+    mode. The backoff is jittered so that retries from separate workers do not
+    line up and collide again.
+    """
+    last_error: sqlite3.Error | None = None
+    for attempt in range(_LOCK_RETRY_ATTEMPTS):
+        try:
+            return _consume_bucket(
+                database_path,
+                bucket_hash,
+                limit=limit,
+                window_seconds=window_seconds,
+                cleanup_window_seconds=cleanup_window_seconds,
+            )
+        except sqlite3.Error as error:
+            if not _is_contention_error(error):
+                raise
+            last_error = error
+            if attempt < _LOCK_RETRY_ATTEMPTS - 1:
+                delay = _LOCK_RETRY_BASE_SECONDS * (2**attempt) * (0.5 + random())
+                sleep(delay)
+    assert last_error is not None
+    raise last_error
 
 
 def _consume_bucket(

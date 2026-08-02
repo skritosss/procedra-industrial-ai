@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -1494,3 +1495,45 @@ def test_ready_details_runs_the_deep_database_verification(tmp_path, monkeypatch
     assert response.status_code == 200
     assert response.json()["verification_depth"] == "deep"
     assert calls == ["deep"]
+
+
+def test_rate_limit_retries_a_locked_database_before_failing(monkeypatch) -> None:
+    attempts: list[int] = []
+    original = rate_limit._consume_bucket
+
+    def flaky(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(rate_limit, "_consume_bucket", flaky)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/instructions/generate",
+        json={"task": "Подготовить рабочее место оператора перед запуском оборудования"},
+    )
+
+    # Contention on the limiter must not read as the service being unavailable.
+    assert response.status_code == 200
+    assert len(attempts) == 2
+
+
+def test_rate_limit_does_not_retry_unrelated_database_errors(monkeypatch) -> None:
+    attempts: list[int] = []
+
+    def broken(*args, **kwargs):
+        attempts.append(1)
+        raise sqlite3.OperationalError("no such table: rate_limit_events")
+
+    monkeypatch.setattr(rate_limit, "_consume_bucket", broken)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/instructions/generate",
+        json={"task": "Подготовить рабочее место оператора перед запуском оборудования"},
+    )
+
+    assert response.status_code == 503
+    assert len(attempts) == 1
