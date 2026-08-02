@@ -75,12 +75,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     from app.storage.auth_store import database_is_ready
     from app.storage.instruction_history import initialize_instruction_storage
     from app.storage.metrics_store import metrics_store_is_ready
+    from app.storage.rate_limit_store import initialize_rate_limit_store
 
     settings = get_settings()
     if not database_is_ready(settings.database_path):
         raise RuntimeError("Authentication database is not ready")
     initialize_instruction_storage()
     metrics_store_is_ready(settings.metrics_database_path)
+    initialize_rate_limit_store(settings.rate_limit_database_path)
     yield
 
 

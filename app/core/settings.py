@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     document_max_bytes: int = Field(default=15 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
     database_path: Path = PROJECT_ROOT / "generated" / "app.sqlite3"
     metrics_database_path: Path = PROJECT_ROOT / "generated" / "metrics.sqlite3"
+    # Separate file for the same reason the metrics store is separate: SQLite
+    # allows one writer, and limiter bookkeeping must not queue behind business
+    # data.
+    rate_limit_database_path: Path = PROJECT_ROOT / "generated" / "rate_limits.sqlite3"
     metrics_bucket_seconds: int = Field(default=60, ge=10, le=3600)
     metrics_window_seconds: int = Field(default=300, ge=60, le=86_400)
     metrics_retention_seconds: int = Field(default=604_800, ge=3600, le=31_536_000)
@@ -142,6 +146,10 @@ class Settings(BaseSettings):
     def validate_production_security(self) -> "Settings":
         if self.metrics_database_path.resolve() == self.database_path.resolve():
             raise ValueError("METRICS_DATABASE_PATH must be separate from DATABASE_PATH")
+        if self.rate_limit_database_path.resolve() == self.database_path.resolve():
+            raise ValueError("RATE_LIMIT_DATABASE_PATH must be separate from DATABASE_PATH")
+        if self.rate_limit_database_path.resolve() == self.metrics_database_path.resolve():
+            raise ValueError("RATE_LIMIT_DATABASE_PATH must be separate from METRICS_DATABASE_PATH")
         if self.metrics_retention_seconds < self.metrics_window_seconds:
             raise ValueError("METRICS_RETENTION_SECONDS must be at least METRICS_WINDOW_SECONDS")
         if self.metrics_window_seconds < self.metrics_bucket_seconds:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 import hashlib
 import sqlite3
 from dataclasses import dataclass
@@ -12,7 +13,10 @@ from ipaddress import ip_address
 from fastapi import Request
 
 from app.core.settings import get_settings
-from app.storage.database import apply_migrations, connect_database
+from app.storage.rate_limit_store import (
+    connect_rate_limit_store,
+    initialize_rate_limit_store,
+)
 
 
 _EXPENSIVE_PATH_PREFIXES = (
@@ -41,11 +45,11 @@ class RateLimitDecision:
 
 
 def reset_rate_limit_state(database_path: Path | None = None) -> None:
-    settings = get_settings()
-    path = database_path or settings.database_path
-    with connect_database(path) as connection:
-        apply_migrations(connection)
+    path = database_path or get_settings().rate_limit_database_path
+    initialize_rate_limit_store(path, force=True)
+    with closing(connect_rate_limit_store(path)) as connection:
         connection.execute("DELETE FROM rate_limit_events")
+        connection.commit()
 
 
 def rate_limit_applies(request: Request) -> bool:
@@ -68,7 +72,7 @@ def check_rate_limit(request: Request) -> RateLimitDecision:
         window = settings.rate_limit_window_seconds
     try:
         return _consume_bucket_with_retry(
-            settings.database_path,
+            settings.rate_limit_database_path,
             _bucket_hash(_client_key(request)),
             limit=limit,
             window_seconds=window,
@@ -138,8 +142,8 @@ def _consume_bucket(
 ) -> RateLimitDecision:
     current = time() if now is None else now
     cutoff = current - window_seconds
-    with connect_database(database_path) as connection:
-        apply_migrations(connection)
+    initialize_rate_limit_store(database_path)
+    with closing(connect_rate_limit_store(database_path)) as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
             connection.execute(

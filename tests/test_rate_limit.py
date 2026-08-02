@@ -1,3 +1,4 @@
+from contextlib import closing
 import sqlite3
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
@@ -7,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core import rate_limit
+from app.core.rate_limit import reset_rate_limit_state
 from app.core.settings import get_settings
 from app.main import app
 
@@ -78,13 +80,13 @@ def test_shared_backend_survives_process_local_state_reset(tmp_path) -> None:
 def test_rate_limit_storage_failure_fails_closed_only_for_protected_routes(tmp_path, monkeypatch) -> None:
     settings = get_settings().model_copy(
         update={
-            "database_path": tmp_path / "unavailable.sqlite3",
+            "rate_limit_database_path": tmp_path / "unavailable.sqlite3",
             "rate_limit_enabled": True,
         }
     )
     monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
     monkeypatch.setattr(
-        "app.core.rate_limit.connect_database",
+        "app.core.rate_limit.connect_rate_limit_store",
         lambda *_: (_ for _ in ()).throw(sqlite3.OperationalError("storage unavailable")),
     )
     client = TestClient(app)
@@ -117,3 +119,33 @@ def test_authenticated_users_behind_one_address_receive_separate_buckets(monkeyp
     first.state.current_user = SimpleNamespace(user_id="user-a")
     second.state.current_user = SimpleNamespace(user_id="user-b")
     assert rate_limit._client_key(first) != rate_limit._client_key(second)
+
+
+def test_rate_limit_events_do_not_touch_the_business_database(tmp_path, monkeypatch) -> None:
+    business = tmp_path / "business.sqlite3"
+    limits = tmp_path / "limits.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": business,
+            "rate_limit_database_path": limits,
+            "rate_limit_enabled": True,
+        }
+    )
+    monkeypatch.setattr("app.core.rate_limit.get_settings", lambda: settings)
+    reset_rate_limit_state(limits)
+    client = TestClient(app)
+
+    client.post("/api/auth/login", json={"email": "missing@example.com", "password": "wrong"})
+
+    # The metrics store was split out to stop sharing the single SQLite writer;
+    # the limiter had been left behind in the business database.
+    with closing(sqlite3.connect(limits)) as connection:
+        recorded = connection.execute("SELECT COUNT(*) FROM rate_limit_events").fetchone()[0]
+    assert recorded >= 1
+
+    with closing(sqlite3.connect(business)) as connection:
+        tables = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+    assert "rate_limit_events" not in tables
