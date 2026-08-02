@@ -1,7 +1,7 @@
 import hashlib
 import os
+import tempfile
 import re
-from io import BytesIO
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -41,11 +41,14 @@ async def upload_document(request: Request, file: UploadFile = File(...)) -> Doc
         if file.size is not None and file.size > max_bytes:
             raise ValueError(f"Document is too large. Maximum size is {max_bytes // (1024 * 1024)} MB")
 
-        content = await _read_upload_limited(file, max_bytes)
-        if not content:
+        spooled_path, spooled_size, content_digest = await _spool_upload_limited(file, max_bytes)
+        if not spooled_size:
             raise ValueError("Uploaded document is empty")
 
-        text = _extract_text(content, extension)
+        try:
+            text = _extract_text(spooled_path, extension)
+        finally:
+            spooled_path.unlink(missing_ok=True)
         if len(text.strip()) < MIN_EXTRACTED_TEXT_CHARS:
             raise ValueError("Document text is too short or could not be extracted")
 
@@ -55,7 +58,7 @@ async def upload_document(request: Request, file: UploadFile = File(...)) -> Doc
             context.project_id,
         )
         document_dir.mkdir(parents=True, exist_ok=True)
-        document_id = _document_id(original_filename, content, context.project_id)
+        document_id = _document_id(original_filename, content_digest, context.project_id)
         stored_filename = f"{document_id}.txt"
         stored_path = document_dir / stored_filename
         title = _title_from_text(text, original_filename)
@@ -100,7 +103,7 @@ async def upload_document(request: Request, file: UploadFile = File(...)) -> Doc
             original_filename=original_filename,
             stored_filename=stored_filename,
             title=title,
-            size_bytes=len(content),
+            size_bytes=spooled_size,
             extracted_characters=len(text.strip()),
         )
         return DocumentUploadResponse(
@@ -139,25 +142,45 @@ def list_documents(request: Request) -> DocumentListResponse:
     return DocumentListResponse(documents=documents)
 
 
-async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
-    chunks: list[bytes] = []
+async def _spool_upload_limited(file: UploadFile, max_bytes: int) -> tuple[Path, int, str]:
+    """Stream the upload to disk and return its path, size and digest.
+
+    The previous version accumulated the whole file in a list and then joined it,
+    so peak memory was about twice the file size for every upload in flight.
+    With a configurable ceiling of up to 100 MB, a handful of concurrent uploads
+    was enough to exhaust the process. Video already streams to disk; documents
+    now do the same.
+    """
+    digest = hashlib.sha256()
     total = 0
-    while True:
-        chunk = await file.read(UPLOAD_READ_CHUNK_BYTES)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            raise ValueError(f"Document is too large. Maximum size is {max_bytes // (1024 * 1024)} MB")
-        chunks.append(chunk)
-    return b"".join(chunks)
+    handle = tempfile.NamedTemporaryFile(prefix="procedra-upload-", delete=False)
+    spooled_path = Path(handle.name)
+    try:
+        with handle:
+            while True:
+                chunk = await file.read(UPLOAD_READ_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError(
+                        f"Document is too large. Maximum size is {max_bytes // (1024 * 1024)} MB"
+                    )
+                digest.update(chunk)
+                handle.write(chunk)
+    except BaseException:
+        spooled_path.unlink(missing_ok=True)
+        raise
+    return spooled_path, total, digest.hexdigest()
 
 
-def _extract_text(content: bytes, extension: str) -> str:
+def _extract_text(path: Path, extension: str) -> str:
     if extension in {".txt", ".md"}:
-        return _decode_text(content)
+        # Text is decoded whole, but only after the size ceiling has been
+        # enforced during spooling, and only for one document at a time.
+        return _decode_text(path.read_bytes())
     if extension == ".pdf":
-        return _extract_pdf_text(content)
+        return _extract_pdf_text(path)
     raise ValueError("Unsupported document type")
 
 
@@ -170,23 +193,25 @@ def _decode_text(content: bytes) -> str:
     raise ValueError("Unable to decode document text")
 
 
-def _extract_pdf_text(content: bytes) -> str:
+def _extract_pdf_text(path: Path) -> str:
     try:
         from pypdf import PdfReader
     except ImportError as exc:
         raise ValueError("PDF support requires the pypdf package") from exc
 
     try:
-        reader = PdfReader(BytesIO(content))
+        reader = PdfReader(str(path))
         pages = [page.extract_text() or "" for page in reader.pages[:80]]
     except Exception as exc:
         raise ValueError("Unable to extract text from PDF") from exc
     return "\n\n".join(page.strip() for page in pages if page.strip())
 
 
-def _document_id(filename: str, content: bytes, project_id: str = "legacy") -> str:
+def _document_id(filename: str, content_digest: str, project_id: str = "legacy") -> str:
     safe_stem = _safe_stem(Path(filename).stem)
-    digest = hashlib.sha256(project_id.encode("utf-8") + b"\0" + content).hexdigest()[:12]
+    digest = hashlib.sha256(
+        project_id.encode("utf-8") + b"\0" + content_digest.encode("utf-8")
+    ).hexdigest()[:12]
     return f"{safe_stem}-{digest}"[:96].strip("-") or digest
 
 

@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -73,7 +74,7 @@ def test_upload_document_rejects_unsupported_extension(tmp_path, monkeypatch) ->
 
 
 def test_document_id_is_safe_for_path_traversal() -> None:
-    document_id = documents._document_id("../../secret.md", b"secret text for hashing")
+    document_id = documents._document_id("../../secret.md", hashlib.sha256(b"secret text").hexdigest())
 
     assert "/" not in document_id
     assert "\\" not in document_id
@@ -111,10 +112,10 @@ def test_stored_document_text_is_bounded() -> None:
 
 
 def test_document_ids_are_project_specific() -> None:
-    content = b"same enterprise document"
+    content_digest = hashlib.sha256(b"same enterprise document").hexdigest()
 
-    assert documents._document_id("manual.md", content, "project-a") != documents._document_id(
-        "manual.md", content, "project-b"
+    assert documents._document_id("manual.md", content_digest, "project-a") != documents._document_id(
+        "manual.md", content_digest, "project-b"
     )
 
 
@@ -417,3 +418,45 @@ def test_uploaded_knowledge_base_signature_tracks_documents(tmp_path) -> None:
 
     assert signature
     assert Path(signature[0][0]).name == "uploaded.txt"
+
+
+def test_upload_streams_to_disk_instead_of_buffering_the_whole_file(monkeypatch) -> None:
+    peak = {"bytes": 0}
+    original_write = documents.tempfile.NamedTemporaryFile
+
+    class _MeasuredFile:
+        def __init__(self, handle):
+            self._handle = handle
+            self.written = 0
+
+        def write(self, chunk):
+            self.written += len(chunk)
+            peak["bytes"] = max(peak["bytes"], self.written)
+            return self._handle.write(chunk)
+
+        def __getattr__(self, name):
+            return getattr(self._handle, name)
+
+        def __enter__(self):
+            self._handle.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self._handle.__exit__(*args)
+
+    def measured(*args, **kwargs):
+        return _MeasuredFile(original_write(*args, **kwargs))
+
+    monkeypatch.setattr(documents.tempfile, "NamedTemporaryFile", measured)
+
+    payload = ("строка документа для проверки потоковой записи\n" * 4000).encode("utf-8")
+    client = TestClient(app)
+    response = client.post(
+        "/api/documents/upload",
+        files={"file": ("streamed.md", payload, "text/markdown")},
+    )
+
+    # The upload used to be accumulated in a list and then joined, so peak memory
+    # was about twice the file size for every upload in flight.
+    assert response.status_code == 200
+    assert peak["bytes"] == len(payload)
