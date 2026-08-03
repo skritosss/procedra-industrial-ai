@@ -237,7 +237,7 @@ make partner-demo-pack
 This creates a reproducible synthetic evidence pack under the local `reports/partner_demo_pack/` folder with instruction JSON/Markdown/PDF, lifecycle evidence, audit trail, execution run, fallback video, keyframes, and a talk track.
 
 Use [`docs/procedra_demo_script.md`](docs/procedra_demo_script.md) for a
-seven-minute walkthrough or a 60-90 second recording plan. Use
+six-and-a-half-minute walkthrough or a 60-90 second recording plan. Use
 [`docs/procedra_outreach_messages.md`](docs/procedra_outreach_messages.md) for
 public-safe feedback and pilot-conversation drafts.
 

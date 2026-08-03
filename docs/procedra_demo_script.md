@@ -27,6 +27,14 @@ One thing to know while clicking: every `/api/` call counts against a ceiling of
 300 requests per minute per client. Normal demo pace is nowhere near it, but a
 long automated click-through can hit it.
 
+**Video is deliberately not in this walkthrough.** Queued video work needs a
+separate worker process, and frame-level analysis needs a configured model;
+without one the pipeline returns fallback records rather than analysis. The
+feature is implemented and covered for queueing, status and cancellation, but no
+video has been processed end to end recently, so it is not demonstrated. Showing
+an unverified feature is how a demo turns into a correction later. If asked, say
+it exists, say it is not part of this recording, and move on.
+
 To avoid opening on empty lists, fill the instance first:
 
 ```bash
@@ -41,7 +49,7 @@ synthetic. Re-running adds a version rather than a duplicate.
 
 Use only synthetic, public, or explicitly approved non-confidential materials. Do not show `.env`, `.env.local`, raw logs, runtime databases, uploaded private documents, private handoff files, customer materials, or local audit notes.
 
-## Seven-minute walkthrough
+## Six-and-a-half-minute walkthrough
 
 ### 0:00-0:40 - Problem and boundary
 
@@ -160,32 +168,30 @@ Say:
 
 > This is trial execution evidence for a controlled demo. It is not proof that the instruction is approved for real production use.
 
-### 5:50-6:40 - Video-derived context
+### 5:50-6:30 - What the system refused to assert
 
-Use an approved short clip or the synthetic fallback demo artifact from `make partner-demo-pack`.
-
-**This is the one section that needs setting up before recording.** Queued video
-work runs in a separate process: start `make video-worker` in a second terminal,
-or the job sits in `queued` and nothing appears on screen. Frame-level vision
-analysis additionally needs a configured model; without one the pipeline returns
-fallback records naming what a human still has to check, which is worth showing
-honestly rather than hiding.
-
-Rehearse this section end to end before recording. The end-to-end probe covers
-queueing, status and cancellation, but it does not download or decode a video.
+This is the section to spend time on. It is the part of the product that is
+finished, tested, and hard to copy.
 
 Show:
 
-- video metadata or transcript when available;
-- keyframes;
-- semantic stages;
-- uncertainty notes.
+- the evidence claims list, every entry marked `unverified`;
+- provenance types side by side: `user_claim` against `retrieved_unverified`;
+- the local-verification list and the expert-review questions;
+- approval blockers on the workflow.
 
 Say:
 
-> Video can provide additional context, but it can be incomplete or misleading. In a real pilot, video-derived details need expert review and approved materials.
+> Nothing here can promote itself. A retrieved source cannot mark its own content
+> as confirmed, and neither can the model — promotion requires an authenticated
+> technologist, a reference to the evidence, and its hash, and the decision is
+> appended to a hash-chained audit trail. The default answer of this system to
+> "is this true" is "not verified", and that default is enforced by the schema
+> rather than by a policy someone has to remember.
 
-### 6:40-7:00 - Close with pilot scope
+If you show one thing from Procedra, show this.
+
+### 6:30-6:50 - Close with pilot scope
 
 Say:
 
@@ -205,13 +211,13 @@ Use this for LinkedIn, GitHub, or a short portfolio clip.
 1. Product opening: show UI and one-sentence problem.
 2. Input: show a narrow manufacturing task.
 3. Result: show structured instruction sections.
-4. Trust layer: show sources, quality evaluation, expert-review questions.
+4. Trust layer: show sources, structure score, and the claims marked unverified.
 5. Workflow: show version/reviewer/checklist evidence.
 6. Boundary: close with "review-ready draft, not autonomous approval."
 
 ### Voiceover
 
-> Procedra is a controlled local-demo prototype for human-in-the-loop industrial AI. It turns a task, technical context, documents, sources, and optional video context into a structured instruction draft. The system adds validation, source context, quality evaluation, expert-review questions, version history, checklist evidence, and audit traceability. It is not a production safety system and does not replace approved local procedures or qualified experts. The current goal is to support a narrow pilot conversation: one instruction family, approved non-confidential materials, named reviewers, and clear evaluation criteria.
+> Procedra is a controlled local-demo prototype for human-in-the-loop industrial AI. It turns a task, technical context, documents, and curated public references into a structured instruction draft. What the system adds is discipline: every factual claim carries a provenance type and stays unverified until an authenticated reviewer promotes it with evidence, and every decision lands in a hash-chained audit trail. It is not a production safety system and does not replace approved local procedures or qualified experts. The current goal is to support a narrow pilot conversation: one instruction family, approved non-confidential materials, named reviewers, and clear evaluation criteria.
 
 ## Demo evidence checklist
 
