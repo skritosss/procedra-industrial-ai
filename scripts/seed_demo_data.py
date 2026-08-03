@@ -215,6 +215,13 @@ def seed(base_url: str, email: str, password: str) -> int:
         {"label": f"{step['number']}. {step['action']}", "completed": True}
         for step in payload["instruction"]["steps"]
     ]
+    # Control points are accepted as quality items; leaving the list empty makes
+    # the execution summary read 1/14 on screen, which looks like a failed run
+    # rather than a demo.
+    quality_items = [
+        {"label": item, "completed": True}
+        for item in payload["instruction"].get("control_points", [])
+    ]
     code, _ = call(
         "POST",
         f"{base_url}/api/instructions/history/{quoted}/versions/{version}/execution",
@@ -223,7 +230,7 @@ def seed(base_url: str, email: str, password: str) -> int:
             "executor": "Оператор смены",
             "notes": "Пробное исполнение в демонстрационном контуре, не производственный запуск.",
             "steps": steps,
-            "quality_items": [],
+            "quality_items": quality_items,
         },
     )
     print("recorded an execution run" if code in (200, 201) else f"  execution failed ({code})")
