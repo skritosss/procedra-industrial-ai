@@ -1,7 +1,8 @@
 # ADR-0001. Abstract the model layer behind provider interfaces
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-07-29
+- **Accepted:** 2026-08-03, with stage 1.1 implemented
 - **Supersedes:** none
 
 ## Context
@@ -64,9 +65,30 @@ app/providers/
 Each protocol stays deliberately small — only what the three call sites already
 use:
 
-- `TextProvider.complete(prompt, schema, timeout) -> str`
-- `VisionProvider.describe(image_bytes, prompt, timeout) -> FrameAnalysis`
-- `EmbeddingProvider.embed(texts, timeout) -> tuple[tuple[float, ...], ...]`
+- `TextProvider.complete_json(system, prompt) -> str`
+- `VisionProvider.describe_image_json(system, prompt, image_data_url) -> str`
+- `EmbeddingProvider.embed(texts) -> tuple[tuple[float, ...], ...]`
+
+Two signatures changed once the call sites were read in detail during stage 1.1.
+Both changes make the boundary smaller, and both are recorded here rather than
+quietly applied.
+
+**Vision returns raw JSON text, not `FrameAnalysis`.** A domain model in the
+return type would drag `app.schemas` inside the provider boundary and require
+every future provider — including a local model behind a corporate gateway — to
+know the instruction schema. Parsing and validation already sit at the call site,
+beside the fallback that handles a bad payload, and they stay there.
+
+**Timeout is provider configuration, not a per-call argument.** All three call
+sites set it once when constructing the client and never vary it per request, so
+a per-call parameter would be an interface with no user.
+
+Each protocol also exposes `name`, and `EmbeddingProvider` exposes `dimensions`.
+The first is what the audit trail records beside a draft — the ADR already
+promised "which model produced this" and it needs somewhere to come from. The
+second lets a cached embedding bundle be rejected when it was built by a
+different model, which the retrieval layer needs the moment a second provider
+exists.
 
 ### Why an OpenAI-compatible provider rather than one class per vendor
 
@@ -160,7 +182,7 @@ Each is a separate bounded stage, and behaviour must not change until 1.4.
 
 | Stage | Scope | Done when |
 |---|---|---|
-| 1.1 | This ADR, protocols in `app/providers/base.py`, no call sites touched | ADR accepted, protocols reviewed |
+| 1.1 | This ADR, protocols in `app/providers/base.py`, no call sites touched | **Done 2026-08-03.** ADR accepted; `app/providers/{__init__,base,errors}.py` added with `tests/test_providers.py`; no call site touched, so the package is inert until 1.2 |
 | 1.2 | `openai_api` and `deterministic` providers, registry, three call sites migrated | Full suite green, behaviour identical, no SDK import outside `app/providers/` |
 | 1.3 | Settings rename with compatibility, schema and database migration | Existing history readable, both spellings accepted |
 | 1.4 | Closed-perimeter profile, egress enforcement, acceptance test with a local model | Application starts and serves with no network route |
