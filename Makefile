@@ -14,7 +14,7 @@ DEMO_ENV ?= DEPLOYMENT_MODE=demo ALLOW_UNAUTHENTICATED_ACCESS=true
 BACKUP ?=
 SAFETY_BACKUP ?=
 
-.PHONY: venv env install run video-worker video-job-contention test lint typecheck compile pip-check static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination demo-eval partner-demo-pack cleanup-plan cleanup-delete db-migrate db-verify db-backup db-restore document-ownership-plan document-ownership-apply smoke api-smoke health ready ready-details metrics docker-build docker-config docker-up docker-down
+.PHONY: venv env install run video-worker video-job-contention test lint typecheck compile pip-check static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination end-to-end demo-eval partner-demo-pack cleanup-plan cleanup-delete db-migrate db-verify db-backup db-restore document-ownership-plan document-ownership-apply smoke api-smoke health ready ready-details metrics docker-build docker-config docker-up docker-down
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -66,6 +66,9 @@ safety-eval:
 
 quality-discrimination:
 	$(DEMO_ENV) $(APP_PYTHON) scripts/run_quality_discrimination.py
+
+end-to-end:
+	$(APP_PYTHON) scripts/run_end_to_end_probe.py
 
 demo-eval:
 	$(DEMO_ENV) $(APP_PYTHON) scripts/run_demo_eval.py
