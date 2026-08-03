@@ -2,6 +2,24 @@
 
 The evaluation module scores generated manufacturing instructions with a deterministic rubric. It is designed to work during local demos even when OpenAI quota is unavailable.
 
+## What the score is, and what it is not
+
+**It measures the shape of the document.** Whether the required sections exist,
+whether they are filled with something substantive rather than "не указано",
+whether steps carry expected results and verification methods, whether declared
+hazards are addressed somewhere, whether the work runs in a sensible order.
+
+**It does not measure correctness.** Nothing here knows the machine, the shop, or
+the approved procedure. A draft can score in the nineties and still be wrong for
+the equipment in front of the operator — wrong torque, wrong sequence, a missing
+permit. The verdict text says "структура", never "качество", for this reason.
+
+**It is not independent of what it grades.** The deterministic generator and this
+rubric were written together and share a template, so a high score on a generated
+draft partly reflects that shared origin. `make quality-discrimination` measures
+how much the criteria can actually distinguish, and reports how many checks never
+fail — currently a majority of them.
+
 ## How a criterion is scored
 
 Each criterion is scored from 0 to 100 as the mean of its checks. A check is

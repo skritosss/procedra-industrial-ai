@@ -56,16 +56,29 @@ Procedra explores a practical AI workflow for this problem:
 
 ## Product capabilities
 
+> **What runs by default.** The shipped image sets `OPENAI_ENABLED=false`, so an
+> installation with no configuration produces instructions through the
+> deterministic template path — no model is called. Everything measured in this
+> repository, including the test suite and the evaluation pack, was produced on
+> that path. The model-backed path is implemented and optional; its output
+> quality has not been measured here.
+
 - Russian industrial instruction generation with structured JSON validation.
 - Human-readable Markdown and PDF export.
 - Bilingual RU/EN single-page web interface.
 - Deterministic fallback when OpenAI is disabled, unavailable, or returns invalid JSON.
-- Deterministic quality evaluation with criterion-level scores and recommendations.
+- Deterministic structural evaluation with criterion-level scores and recommendations. The score
+  measures the shape of the document — required sections present, filled with something substantive,
+  internally consistent. It does not assess whether the instruction is technically correct or safe
+  for a given machine; a draft can be structurally complete and operationally wrong.
 - Request-focus and quality-improvement passes that keep the result tied to the exact user request.
 - Industry profiles and operation templates for manufacturing, safety, emergency response, utilities, transport, food production, information security, and other workplace scenarios.
 - Hybrid semantic/keyword retrieval over local and uploaded documents.
 - Enterprise document upload and indexing for `.txt`, `.md`, and text-based `.pdf`.
-- Curated public-source retrieval with authority/source metadata and influence scoring.
+- Curated public-source catalogue with authority/source metadata and influence scoring. This is a
+  fixed, versioned list of reference documents shipped with the application, matched against the
+  request by industry profile and keywords. It performs no network calls and does not search the
+  internet.
 - Durable local/URL video jobs with persisted status, lease recovery, bounded
   retry, hard stage time budgets and cancellation, metadata/subtitles,
   keyframes, semantic stages, optional frame-level vision analysis, and
@@ -259,6 +272,24 @@ curl -X POST http://127.0.0.1:8000/api/instructions/generate \
     "technical_context": "Перед запуском необходимо проверить состояние инструмента, ограждений и аварийной кнопки."
   }'
 ```
+
+## Working with the API
+
+Instruction identifiers are derived from the Russian title, so they are not
+ASCII:
+
+```text
+инструкция-подготовить-рабочее-место-оператора-перед-запуском-оборудован-1768dd6f
+```
+
+A browser percent-encodes these automatically. Any other client must do it
+explicitly before putting the identifier in a path, or the request will fail
+before it reaches the service.
+
+Saved-version endpoints validate against the stored version rather than trusting
+the caller: an execution checklist must list exactly the steps of that version,
+and workflow status accepts only `ai_draft`, `expert_review`, `approved` or
+`rejected`.
 
 ## Accounts and roles
 

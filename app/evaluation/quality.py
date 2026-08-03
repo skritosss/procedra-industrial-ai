@@ -642,13 +642,33 @@ def _verdict(score: int, safety_findings: list[SafetyFinding]) -> str:
             "Структурная оценка завершена, но применение заблокировано safety-сигналами "
             "до проверки и исправления ответственным специалистом."
         )
+    # The wording deliberately says "структура", never "качество". The score
+    # counts whether required fields are present, filled with something
+    # substantive and internally consistent. It cannot tell whether the
+    # instruction is technically correct or safe for a specific machine — a
+    # draft can be structurally complete and operationally wrong. Reading a high
+    # number as "the instruction is right" is the single most likely way this
+    # output misleads a technologist.
     if score >= 90:
-        return "Высокое качество: инструкция подходит для демонстрации и дальнейшей экспертной проверки."
+        return (
+            "Структура полная: обязательные разделы на месте и заполнены содержательно. "
+            "Это оценка формы документа, а не его правильности — техническую верность "
+            "подтверждает профильный специалист."
+        )
     if score >= 75:
-        return "Хорошее качество: инструкция применима как черновик, но требует точечной доработки."
+        return (
+            "Структура в основном полная, есть отдельные пробелы в оформлении. "
+            "Правильность содержания оценкой не проверяется."
+        )
     if score >= 60:
-        return "Среднее качество: инструкция требует доработки перед использованием в обучении."
-    return "Низкое качество: инструкция недостаточно полная для производственного сценария."
+        return (
+            "Структура неполная: часть обязательных разделов отсутствует или заполнена формально. "
+            "Требуется доработка до экспертной проверки."
+        )
+    return (
+        "Структура непригодна: обязательных разделов не хватает настолько, "
+        "что документ нельзя выносить на экспертную проверку."
+    )
 
 
 def _risk_level(

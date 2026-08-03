@@ -45,6 +45,11 @@ def isolate_runtime_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr("app.api.documents.UPLOADED_DOCUMENTS_DIR", documents_path)
     monkeypatch.setattr("app.api.instructions.UPLOADED_KNOWLEDGE_BASE", documents_path)
+    # `local_index` keeps its own module-level constant, and retrieval reached
+    # through anything other than the API layer used the real project directory.
+    # A single stray file under uploads/documents/ then changed test results,
+    # which makes a green suite depend on the state of the working copy.
+    monkeypatch.setattr("app.retrieval.local_index.UPLOADED_KNOWLEDGE_BASE", documents_path)
     monkeypatch.setattr("app.main.KEYFRAMES_DIR", keyframes_path)
     monkeypatch.setattr("app.vision.keyframes.KEYFRAME_DIR", keyframes_path)
     monkeypatch.setattr("app.vision.keyframes.UPLOAD_DIR", videos_path)
