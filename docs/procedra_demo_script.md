@@ -10,11 +10,36 @@ Run the local checks:
 
 ```bash
 make smoke
+make end-to-end
 make demo-eval
 make partner-demo-pack
 ```
 
-Use only synthetic, public, or explicitly approved non-confidential materials. Do not show `.env.local`, raw logs, runtime databases, uploaded private documents, private handoff files, customer materials, or local audit notes.
+Last verified 2026-08-02: smoke green with 423 tests, end-to-end 65/65 with no
+failures under load, demo-eval 15/15 with an average structure score of 81,
+partner pack built with 19 artifacts.
+
+Start the application with `make run`. Since the deployment mode now defaults to
+production, a bare `uvicorn app.main:app` refuses to start without configuration —
+that is deliberate, and `make run` supplies the demo settings.
+
+One thing to know while clicking: every `/api/` call counts against a ceiling of
+300 requests per minute per client. Normal demo pace is nowhere near it, but a
+long automated click-through can hit it.
+
+To avoid opening on empty lists, fill the instance first:
+
+```bash
+python scripts/seed_demo_data.py
+```
+
+It signs in as a demo administrator, uploads one reference document and saves
+three instructions across different profiles, then takes the first one through
+expert review and records an execution run — the state a real user would have
+after a week rather than after a fresh install. Everything it writes is
+synthetic. Re-running adds a version rather than a duplicate.
+
+Use only synthetic, public, or explicitly approved non-confidential materials. Do not show `.env`, `.env.local`, raw logs, runtime databases, uploaded private documents, private handoff files, customer materials, or local audit notes.
 
 ## Seven-minute walkthrough
 
@@ -82,17 +107,32 @@ Say:
 
 > Procedra treats retrieved context as support for review, not as automatic factual validation. The system should surface what needs local confirmation instead of inventing missing industrial details.
 
-### 3:20-4:00 - Quality evaluation and export
+### 3:20-4:00 - Structure score and export
 
 Show:
 
-- quality evaluation;
+- the structure score and its verdict text;
 - recommendations or criterion-level scores;
 - Markdown, JSON, and PDF export.
 
 Say:
 
-> The deterministic evaluation is a demo-readiness signal. It is not a substitute for domain-expert review or a field validation study.
+> This number measures the shape of the document — whether the required sections
+> exist, whether they are filled with something substantive, whether declared
+> hazards are addressed somewhere. It does not say the instruction is correct for
+> this machine. A draft can be structurally complete and operationally wrong, and
+> the wording on screen says "структура" rather than "качество" for that reason.
+
+Do not say:
+
+- "the instruction scored 95 out of 100" without the sentence above;
+- "quality score";
+- that the number reflects safety.
+
+If asked how the criteria were validated, the honest answer is that they are
+checked by a mutation harness (`make quality-discrimination`) which reports how
+many checks never fail — currently a majority. There is no expert-labelled
+benchmark behind the number.
 
 ### 4:00-5:00 - Version history and review workflow
 
@@ -123,6 +163,16 @@ Say:
 ### 5:50-6:40 - Video-derived context
 
 Use an approved short clip or the synthetic fallback demo artifact from `make partner-demo-pack`.
+
+**This is the one section that needs setting up before recording.** Queued video
+work runs in a separate process: start `make video-worker` in a second terminal,
+or the job sits in `queued` and nothing appears on screen. Frame-level vision
+analysis additionally needs a configured model; without one the pipeline returns
+fallback records naming what a human still has to check, which is worth showing
+honestly rather than hiding.
+
+Rehearse this section end to end before recording. The end-to-end probe covers
+queueing, status and cancellation, but it does not download or decode a video.
 
 Show:
 
