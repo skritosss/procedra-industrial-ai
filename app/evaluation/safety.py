@@ -258,14 +258,47 @@ def _mark_claim_unverified(value: str) -> str:
     return cleaned
 
 
+_ABSENCE_MARKERS = re.compile(
+    r"\b(?:нет|без|отсутств\w*|не\s+должн\w*|не\s+допуска\w*|исключ\w*|"
+    r"no|not|without|free of|absence)\b",
+    re.IGNORECASE,
+)
+
+
 def _first_actionable_match(text: str, patterns: tuple[str, ...]) -> re.Match[str] | None:
+    """Find a hazardous instruction, ignoring sentences that forbid it.
+
+    Checking only the words immediately before the match caught "не отключать
+    блокировку" but not the far more common industrial phrasing, where the
+    negation follows: "убедиться, что в зоне движения нет людей". That sentence
+    demands the opposite of a hazard, and flagging it fired a critical blocker on
+    the project's own curated safety texts — every occupational-safety draft
+    generated with public sources came out critical. A detector that fires on
+    correct safety writing teaches its users to ignore it.
+
+    So the whole sentence around the match is inspected: a negation before it, or
+    a statement of absence anywhere in it, means the text is describing a
+    requirement rather than ordering a dangerous act.
+    """
     for pattern in patterns:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
             prefix = text[max(0, match.start() - 28) : match.start()]
             if re.search(r"(?:не|нельзя|запрещ\w*|do not|must not|never)\s*$", prefix):
                 continue
+            if _ABSENCE_MARKERS.search(_sentence_around(text, match.start(), match.end())):
+                continue
             return match
     return None
+
+
+def _sentence_around(text: str, start: int, end: int) -> str:
+    left = max(
+        (text.rfind(mark, 0, start) for mark in (".", "!", "?", ";")),
+        default=-1,
+    )
+    right_candidates = [position for position in (text.find(mark, end) for mark in (".", "!", "?", ";")) if position != -1]
+    right = min(right_candidates) if right_candidates else len(text)
+    return text[left + 1 : right]
 
 
 def _contradiction_excerpt(original: str, lowered: str) -> str | None:
