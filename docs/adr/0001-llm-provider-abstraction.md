@@ -58,9 +58,19 @@ app/providers/
     base.py         # Protocols: TextProvider, VisionProvider, EmbeddingProvider
     registry.py     # Selection by settings, single construction point
     openai_api.py   # OpenAI and any OpenAI-compatible endpoint (base_url)
-    deterministic.py# The current fallback paths, promoted to a real provider
     errors.py       # ProviderError hierarchy; SDK exceptions never escape
 ```
+
+**There is no `deterministic.py`.** The ADR originally listed one; building
+stage 1.2 showed it would be a fiction, and the reasoning is recorded in
+`app/providers/registry.py`. The text fallback constructs a `WorkInstruction`
+from the request object rather than JSON from a prompt, so wrapping it in
+`TextProvider` would mean serialising a validated model purely so the caller
+could parse it back. Local embeddings for indexed chunks are precomputed at
+indexing time and stored on the chunk, so nothing is invoked per query. The
+registry returns `None` instead, every caller already has the branch, and a
+closed-perimeter deployment gets what it needs: with no model configured,
+nothing in this package can reach the network.
 
 Each protocol stays deliberately small — only what the three call sites already
 use:
@@ -183,7 +193,7 @@ Each is a separate bounded stage, and behaviour must not change until 1.4.
 | Stage | Scope | Done when |
 |---|---|---|
 | 1.1 | This ADR, protocols in `app/providers/base.py`, no call sites touched | **Done 2026-08-03.** ADR accepted; `app/providers/{__init__,base,errors}.py` added with `tests/test_providers.py`; no call site touched, so the package is inert until 1.2 |
-| 1.2 | `openai_api` and `deterministic` providers, registry, three call sites migrated | Full suite green, behaviour identical, no SDK import outside `app/providers/` |
+| 1.2 | `openai_api` provider, registry, three call sites migrated | **Done 2026-08-03.** Suite green at 433 tests, no SDK import outside `app/providers/`, enforced by `test_no_vendor_sdk_is_imported_outside_the_provider_package` |
 | 1.3 | Settings rename with compatibility, schema and database migration | Existing history readable, both spellings accepted |
 | 1.4 | Closed-perimeter profile, egress enforcement, acceptance test with a local model | Application starts and serves with no network route |
 
