@@ -45,6 +45,7 @@ def text_provider(settings: Settings | None = None) -> TextProvider | None:
 
     try:
         return OpenAICompatibleTextProvider(
+            base_url=resolved.llm_base_url,
             api_key=resolved.openai_api_key,
             model=resolved.openai_model,
             timeout=resolved.openai_timeout_seconds,
@@ -61,6 +62,7 @@ def vision_provider(settings: Settings | None = None) -> VisionProvider | None:
 
     try:
         return OpenAICompatibleVisionProvider(
+            base_url=resolved.llm_base_url,
             api_key=resolved.openai_api_key,
             model=resolved.openai_vision_model,
             timeout=resolved.openai_timeout_seconds,
@@ -77,6 +79,7 @@ def embedding_provider(settings: Settings | None = None) -> EmbeddingProvider | 
 
     try:
         return OpenAICompatibleEmbeddingProvider(
+            base_url=resolved.llm_base_url,
             api_key=resolved.openai_api_key,
             model=resolved.openai_embedding_model,
             timeout=resolved.openai_timeout_seconds,

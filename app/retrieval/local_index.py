@@ -9,9 +9,8 @@ from pathlib import Path
 
 
 from app.core.settings import get_settings
-from app.providers.errors import ProviderError
-from app.providers.openai_api import OpenAICompatibleEmbeddingProvider
-from app.providers.registry import EMBEDDING_DIMENSIONS
+from app.providers.errors import ProviderError, ProviderNotConfiguredError
+from app.providers.registry import embedding_provider
 from app.retrieval.public_sources import retrieve_public_sources
 from app.schemas.instruction import ContextGenerationRequest, RetrievedSource
 
@@ -305,14 +304,10 @@ def _embedding_bundle(
     chunks: tuple[DocumentChunk, ...],
 ) -> tuple[tuple[float, ...], dict[tuple[str, int], tuple[float, ...]], str]:
     settings = get_settings()
-    api_key = getattr(settings, "openai_api_key", None)
-    openai_enabled = getattr(settings, "openai_enabled", False)
-    if openai_enabled and api_key:
-        model = getattr(settings, "openai_embedding_model", "text-embedding-3-small")
-        timeout = getattr(settings, "openai_timeout_seconds", 10.0)
+    if getattr(settings, "openai_enabled", False) and getattr(settings, "openai_api_key", None):
         try:
             texts = (_embedding_input(query), *(_embedding_input(chunk.text) for chunk in chunks))
-            embeddings = _model_embeddings(texts, api_key, model, timeout)
+            embeddings = _model_embeddings(texts)
             return (
                 embeddings[0],
                 {_chunk_key(chunk): embeddings[index + 1] for index, chunk in enumerate(chunks)},
@@ -327,24 +322,18 @@ def _embedding_bundle(
     )
 
 
-def _model_embeddings(
-    texts: tuple[str, ...],
-    api_key: str,
-    model: str,
-    timeout: float,
-) -> tuple[tuple[float, ...], ...]:
+def _model_embeddings(texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
     """Ask the configured provider for vectors.
 
-    The vendor SDK used to be constructed here. It now lives behind
-    `app/providers/`, which is the only place allowed to import it, so this
-    module no longer knows or cares which endpoint answers.
+    Built through the registry rather than directly, so a deployment that points
+    `LLM_BASE_URL` at its own endpoint gets embeddings from there too. Building
+    the provider here by hand quietly sent them to the vendor default while
+    generation went elsewhere — the kind of split that is invisible until
+    retrieval quality drops in a closed perimeter.
     """
-    provider = OpenAICompatibleEmbeddingProvider(
-        api_key=api_key,
-        model=model,
-        timeout=timeout,
-        dimensions=EMBEDDING_DIMENSIONS,
-    )
+    provider = embedding_provider()
+    if provider is None:
+        raise ProviderNotConfiguredError("registry", "no embedding provider configured")
     return provider.embed(texts)
 
 

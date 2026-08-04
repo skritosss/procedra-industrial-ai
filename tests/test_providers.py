@@ -122,3 +122,50 @@ def test_no_vendor_sdk_is_imported_outside_the_provider_package() -> None:
     # the point of the provider layer is that swapping the endpoint touches one
     # package. An import here is how that guarantee quietly rots.
     assert offenders == [], f"vendor SDK imported outside app/providers: {offenders}"
+
+
+def _settings_with(**overrides):
+    from app.core.settings import Settings
+
+    base = {
+        "openai_enabled": True,
+        "openai_api_key": "test-key",
+        "deployment_mode": "demo",
+        "allow_unauthenticated_access": True,
+    }
+    return Settings(_env_file=None, **{**base, **overrides})
+
+
+def test_a_custom_endpoint_reaches_every_provider() -> None:
+    from app.providers.registry import embedding_provider, text_provider, vision_provider
+
+    settings = _settings_with(llm_base_url="https://gateway.example.local/v1")
+
+    # Without this the provider layer is vendor-neutral on paper and still only
+    # able to talk to one company in practice: ADR-0001 exists so a plant can
+    # point at its own endpoint.
+    for build in (text_provider, vision_provider, embedding_provider):
+        provider = build(settings)
+        assert provider is not None
+        assert str(provider._client.base_url).startswith("https://gateway.example.local")
+
+
+def test_the_default_endpoint_is_left_to_the_sdk() -> None:
+    from app.providers.registry import text_provider
+
+    provider = text_provider(_settings_with(llm_base_url=None))
+
+    assert provider is not None
+    assert "openai.com" in str(provider._client.base_url)
+
+
+def test_no_provider_is_built_without_a_model_configured() -> None:
+    from app.providers.registry import embedding_provider, text_provider, vision_provider
+
+    settings = _settings_with(openai_enabled=False)
+
+    # This is the closed-perimeter guarantee in its simplest form: with nothing
+    # configured, nothing in the provider layer can reach the network.
+    assert text_provider(settings) is None
+    assert vision_provider(settings) is None
+    assert embedding_provider(settings) is None

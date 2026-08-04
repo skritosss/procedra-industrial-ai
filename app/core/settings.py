@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     openai_vision_model: str = "gpt-4.1-mini"
     openai_embedding_model: str = "text-embedding-3-small"
     openai_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    # The endpoint the model calls go to. Empty means the vendor default.
+    #
+    # This is what makes ADR-0001 real rather than architectural: the provider
+    # layer has been vendor-neutral since stage 1.2, but without a configurable
+    # endpoint the product could still only ever talk to one company. Any
+    # OpenAI-compatible URL works here — a Russian hosted model, a self-hosted
+    # vLLM or Ollama inside a plant perimeter, or a corporate LLM gateway.
+    llm_base_url: str | None = None
     video_max_bytes: int = Field(default=250 * 1024 * 1024, ge=1 * 1024 * 1024, le=2 * 1024 * 1024 * 1024)
     video_max_duration_seconds: float = Field(default=1800.0, ge=10, le=7200)
     video_network_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
@@ -95,6 +103,14 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @field_validator("llm_base_url", mode="before")
+    @classmethod
+    def empty_base_url_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = str(value).strip()
+        return stripped or None
 
     @field_validator("openai_api_key", mode="before")
     @classmethod

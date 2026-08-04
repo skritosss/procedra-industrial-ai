@@ -314,6 +314,7 @@ def test_embedding_bundle_falls_back_to_local_when_openai_embedding_fails(monkey
                 "openai_api_key": "test",
                 "openai_embedding_model": "test-model",
                 "openai_timeout_seconds": 1,
+                "llm_base_url": None,
             },
         )(),
     )

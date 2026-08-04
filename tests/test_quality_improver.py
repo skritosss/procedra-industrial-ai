@@ -70,7 +70,7 @@ def test_pipeline_improves_valid_openai_instruction_before_response(monkeypatch)
     monkeypatch.setattr(
         pipeline,
         "get_settings",
-        lambda: SimpleNamespace(openai_enabled=True, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1),
+        lambda: SimpleNamespace(openai_enabled=True, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1, llm_base_url=None),
     )
     monkeypatch.setattr(pipeline, "_generate_with_model", lambda **kwargs: _sparse_instruction())
 

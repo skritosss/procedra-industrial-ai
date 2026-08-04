@@ -52,7 +52,7 @@ def test_pipeline_falls_back_when_openai_fails(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline,
         "get_settings",
-        lambda: SimpleNamespace(openai_enabled=True, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1),
+        lambda: SimpleNamespace(openai_enabled=True, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1, llm_base_url=None),
     )
 
     def fail_generation(*args, **kwargs):
@@ -74,7 +74,7 @@ def test_pipeline_falls_back_when_openai_output_is_invalid(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline,
         "get_settings",
-        lambda: SimpleNamespace(openai_enabled=True, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1),
+        lambda: SimpleNamespace(openai_enabled=True, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1, llm_base_url=None),
     )
 
     def invalid_generation(*args, **kwargs):
@@ -96,7 +96,7 @@ def test_pipeline_uses_fallback_when_openai_disabled(monkeypatch) -> None:
     monkeypatch.setattr(
         pipeline,
         "get_settings",
-        lambda: SimpleNamespace(openai_enabled=False, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1),
+        lambda: SimpleNamespace(openai_enabled=False, openai_api_key="present", openai_model="test-model", openai_timeout_seconds=1, llm_base_url=None),
     )
 
     response = pipeline.generate_instruction(request)
@@ -254,7 +254,7 @@ def test_poisoned_retrieved_source_fails_closed(monkeypatch) -> None:
             openai_enabled=False,
             openai_api_key=None,
             openai_model="test-model",
-            openai_timeout_seconds=1,
+            openai_timeout_seconds=1, llm_base_url=None,
         ),
     )
 
@@ -297,7 +297,7 @@ def test_mocked_llm_cannot_mark_untrusted_context_as_confirmed(monkeypatch) -> N
             openai_enabled=True,
             openai_api_key="present",
             openai_model="test-model",
-            openai_timeout_seconds=1,
+            openai_timeout_seconds=1, llm_base_url=None,
         ),
     )
     monkeypatch.setattr(pipeline, "_generate_with_model", lambda **kwargs: model_instruction)

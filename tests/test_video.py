@@ -1205,6 +1205,7 @@ def test_analyze_keyframes_respects_openai_frame_limit(monkeypatch, tmp_path) ->
                 "openai_enabled": True,
                 "openai_api_key": "test",
                 "openai_timeout_seconds": 1,
+                "llm_base_url": None,
                 "openai_vision_model": "test-model",
                 "vision_max_keyframes": 1,
                 "vision_max_image_bytes": 1024,
