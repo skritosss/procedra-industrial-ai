@@ -178,6 +178,7 @@ const translations = {
           emergencyActions: "Действия при нештатной ситуации",
           implementationLimits: "Ограничения и проверка перед внедрением",
           generationMode: "Режим",
+          generationModeLabels: { model: "Языковая модель", deterministic: "Детерминированный шаблон" },
           overallScore: "Балл структуры",
           verdict: "Вердикт",
           riskLevel: "Уровень риска",
@@ -507,6 +508,7 @@ const translations = {
           emergencyActions: "Emergency actions",
           implementationLimits: "Implementation limits and review",
           generationMode: "Mode",
+          generationModeLabels: { model: "Language model", deterministic: "Deterministic template" },
           overallScore: "Structure score",
           verdict: "Verdict",
           riskLevel: "Risk level",
@@ -1655,7 +1657,7 @@ const translations = {
               <h3>${escapeHtml(instruction.title)}</h3>
               <p>${escapeHtml(instruction.purpose)}</p>
               <p class="step-meta">${escapeHtml(instruction.scope)}</p>
-              <p class="step-meta">${t("generationMode")}: ${escapeHtml(payload.generation_mode)}</p>
+              <p class="step-meta">${t("generationMode")}: ${escapeHtml(generationModeLabel(payload.generation_mode))}</p>
             </section>
             <section>
               <h3>${t("passport")}</h3>
@@ -2212,6 +2214,13 @@ const translations = {
           return "inspection";
         }
         return document.getElementById("instruction_type").value || "general";
+      }
+
+      function generationModeLabel(mode) {
+        // The stored value is deliberately vendor-neutral; the screen should say
+        // what it means rather than echo an internal identifier.
+        const labels = translations[language].generationModeLabels || {};
+        return labels[mode] || mode || "";
       }
 
       function escapeHtml(value) {

@@ -1,10 +1,17 @@
+import pytest
 from fastapi.testclient import TestClient
 from datetime import UTC, datetime, timedelta
 
 from app.main import app
 from app.core.settings import get_settings
 from app.schemas.instruction import InstructionRequest
+from app.generation.pipeline import generate_instruction
 from app.storage import instruction_history
+from app.storage.instruction_history import (
+    HISTORY_DATABASE_FILENAME,
+    get_instruction_history_detail,
+    save_instruction_history,
+)
 from app.storage.auth_store import create_organization, create_session, create_user
 
 
@@ -907,3 +914,51 @@ def _minimal_history_payload(title: str) -> dict:
             "verdict": "OK",
         },
     }
+
+
+def _rewrite_stored_mode(database_path, instruction_id: str, legacy_value: str) -> None:
+    import json
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            "SELECT record_json, payload_json FROM instruction_versions WHERE instruction_id = ?",
+            (instruction_id,),
+        ).fetchone()
+        record_json = json.loads(row["record_json"])
+        payload_json = json.loads(row["payload_json"])
+        record_json["generation_mode"] = legacy_value
+        payload_json["generation_mode"] = legacy_value
+        connection.execute(
+            "UPDATE instruction_versions SET record_json = ?, payload_json = ? WHERE instruction_id = ?",
+            (
+                json.dumps(record_json, ensure_ascii=False),
+                json.dumps(payload_json, ensure_ascii=False),
+                instruction_id,
+            ),
+        )
+        connection.commit()
+
+
+@pytest.mark.parametrize(
+    ("legacy_value", "expected"),
+    [("fallback", "deterministic"), ("openai", "model")],
+)
+def test_instruction_saved_before_the_rename_still_loads(tmp_path, legacy_value, expected) -> None:
+    """A row written with the vendor vocabulary must survive the rename.
+
+    `generation_mode` lives inside the payload JSON, not in a column, and it is
+    validated on read. Narrowing the literal without accepting the old spellings
+    would not corrupt anything — it would make every stored instruction
+    unreadable, which is worse because it looks like data loss.
+    """
+    payload = generate_instruction(InstructionRequest(task="Проверить оборудование перед запуском смены"))
+    record = save_instruction_history(payload, history_dir=tmp_path)
+    _rewrite_stored_mode(tmp_path / HISTORY_DATABASE_FILENAME, record.instruction_id, legacy_value)
+
+    detail = get_instruction_history_detail(record.instruction_id, record.version, history_dir=tmp_path)
+
+    assert detail is not None
+    assert detail.record.generation_mode == expected
+    assert detail.payload.generation_mode == expected

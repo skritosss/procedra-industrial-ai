@@ -42,14 +42,14 @@ def test_link_steps_to_frames_uses_text_overlap() -> None:
                 timestamp_seconds=1,
                 summary="Оператор проверяет защитное ограждение станка.",
                 visible_equipment=["защитное ограждение", "станок"],
-                analysis_mode="openai",
+                analysis_mode="model",
             ),
             FrameAnalysis(
                 frame_index=20,
                 timestamp_seconds=5,
                 summary="Оператор нажимает кнопку запуска.",
                 operator_actions=["нажать кнопку запуска"],
-                analysis_mode="openai",
+                analysis_mode="model",
             ),
         ],
         [
@@ -70,7 +70,7 @@ def test_link_steps_to_frames_uses_text_overlap() -> None:
 
     assert [link.frame_index for link in links] == [10, 20]
     assert links[0].confidence > 0.35
-    assert links[0].analysis_mode == "openai"
+    assert links[0].analysis_mode == "model"
     assert links[0].image_url == "/generated/keyframes/test/a.jpg"
 
 

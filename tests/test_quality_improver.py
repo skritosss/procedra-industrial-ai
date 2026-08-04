@@ -76,7 +76,7 @@ def test_pipeline_improves_valid_openai_instruction_before_response(monkeypatch)
 
     response = pipeline.generate_instruction(request)
 
-    assert response.generation_mode == "openai"
+    assert response.generation_mode == "model"
     assert response.instruction.steps[0].safety_note
     assert len(response.instruction.control_points) >= 4
     assert len(response.instruction.local_verification_required) >= 3

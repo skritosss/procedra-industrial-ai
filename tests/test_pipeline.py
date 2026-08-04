@@ -62,7 +62,7 @@ def test_pipeline_falls_back_when_openai_fails(monkeypatch) -> None:
 
     response = pipeline.generate_instruction(request)
 
-    assert response.generation_mode == "fallback"
+    assert response.generation_mode == "deterministic"
     assert response.instruction.steps
 
 
@@ -84,7 +84,7 @@ def test_pipeline_falls_back_when_openai_output_is_invalid(monkeypatch) -> None:
 
     response = pipeline.generate_instruction(request)
 
-    assert response.generation_mode == "fallback"
+    assert response.generation_mode == "deterministic"
     assert response.instruction.control_points
 
 
@@ -101,7 +101,7 @@ def test_pipeline_uses_fallback_when_openai_disabled(monkeypatch) -> None:
 
     response = pipeline.generate_instruction(request)
 
-    assert response.generation_mode == "fallback"
+    assert response.generation_mode == "deterministic"
 
 
 def test_fallback_instruction_includes_technical_context_points() -> None:
@@ -304,7 +304,7 @@ def test_mocked_llm_cannot_mark_untrusted_context_as_confirmed(monkeypatch) -> N
 
     response = pipeline.generate_instruction(request)
 
-    assert response.generation_mode == "openai"
+    assert response.generation_mode == "model"
     assert response.instruction.workflow.status == "ai_draft"
     assert response.evaluation.risk_level == "critical"
     assert "hazardous_action" in {

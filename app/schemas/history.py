@@ -1,18 +1,20 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.instruction import (
     EvidenceClaim,
+    GenerationMode,
     InstructionLifecycleStatus,
     InstructionResponse,
     RiskLevel,
+    normalize_generation_mode,
 )
 
 
 ReviewerRole = Literal["master", "technologist", "safety", "quality", "admin"]
-GenerationMode = Literal["openai", "fallback"]
+__all_generation_mode__ = GenerationMode  # re-exported: storage and API share one vocabulary
 AuditEventType = Literal[
     "version_saved",
     "workflow_updated",
@@ -43,6 +45,11 @@ class InstructionHistoryRecord(BaseModel):
     title: str
     created_at: datetime
     generation_mode: GenerationMode
+
+    @field_validator("generation_mode", mode="before")
+    @classmethod
+    def accept_legacy_generation_mode(cls, value: object) -> object:
+        return normalize_generation_mode(value)
     overall_score: int = Field(..., ge=0, le=100)
     risk_level: RiskLevel
     workflow_status: InstructionLifecycleStatus

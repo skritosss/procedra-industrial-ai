@@ -109,8 +109,8 @@ def _build_story(payload: InstructionResponse, styles: dict[str, ParagraphStyle]
     links_by_step = {link.step_number: link for link in payload.step_frame_links}
     story: list = [
         Paragraph(_escape(instruction.title), styles["title"]),
-        Paragraph(f"Режим генерации: {_escape(payload.generation_mode)}", styles["meta"]),
-        Paragraph(f"Оценка качества: {payload.evaluation.overall_score}/100. {_escape(payload.evaluation.verdict)}", styles["meta"]),
+        Paragraph(f"Режим генерации: {_generation_mode_label(payload.generation_mode)}", styles["meta"]),
+        Paragraph(f"Оценка структуры: {payload.evaluation.overall_score}/100. {_escape(payload.evaluation.verdict)}", styles["meta"]),
         Paragraph(f"Уровень риска: {_risk_label(payload.evaluation.risk_level)}", styles["meta"]),
         Spacer(1, 4),
     ]
@@ -267,6 +267,12 @@ def _expert_review_items(payload: InstructionResponse) -> list[str]:
         f"Уровень риска: {_risk_label(payload.evaluation.risk_level)}.",
         *payload.evaluation.expert_review_notes,
     ]
+
+
+def _generation_mode_label(mode: str) -> str:
+    """Say what produced the draft, not which internal identifier was stored."""
+    labels = {"model": "языковая модель", "deterministic": "детерминированный шаблон"}
+    return _escape(labels.get(mode, mode))
 
 
 def _risk_label(risk_level: str) -> str:

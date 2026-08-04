@@ -1113,7 +1113,7 @@ def test_analyze_keyframes_falls_back_when_openai_disabled(monkeypatch, tmp_path
 
     analyses = analyze_keyframes([keyframe])
 
-    assert analyses[0].analysis_mode == "openai_disabled"
+    assert analyses[0].analysis_mode == "model_disabled"
     assert analyses[0].operator_actions
 
 
@@ -1218,7 +1218,7 @@ def test_analyze_keyframes_respects_openai_frame_limit(monkeypatch, tmp_path) ->
             frame_index=keyframe.frame_index,
             timestamp_seconds=keyframe.timestamp_seconds,
             summary="openai",
-            analysis_mode="openai",
+            analysis_mode="model",
         ),
     )
     keyframe_items = [
@@ -1228,7 +1228,7 @@ def test_analyze_keyframes_respects_openai_frame_limit(monkeypatch, tmp_path) ->
 
     analyses = analyze_keyframes(keyframe_items)
 
-    assert [analysis.analysis_mode for analysis in analyses] == ["openai", "vision_skipped_limit"]
+    assert [analysis.analysis_mode for analysis in analyses] == ["model", "vision_skipped_limit"]
 
 
 def test_save_uploaded_video_rejects_oversized_upload(monkeypatch) -> None:

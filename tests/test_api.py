@@ -706,7 +706,7 @@ def test_generate_instruction_endpoint_returns_industrial_payload(monkeypatch) -
     assert response.status_code == 200
     payload = response.json()
     instruction = payload["instruction"]
-    assert payload["generation_mode"] == "fallback"
+    assert payload["generation_mode"] == "deterministic"
     assert instruction["required_ppe"]
     assert instruction["hazard_zones"]
     assert instruction["control_points"]

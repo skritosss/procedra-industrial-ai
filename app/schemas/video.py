@@ -28,7 +28,7 @@ class FrameAnalysis(BaseModel):
     ppe_observations: list[str] = Field(default_factory=list, max_length=12)
     potential_hazards: list[str] = Field(default_factory=list, max_length=12)
     uncertainties: list[str] = Field(default_factory=list, max_length=12)
-    analysis_mode: str = Field(default="fallback", max_length=50)
+    analysis_mode: str = Field(default="deterministic", max_length=50)
 
     @field_validator(
         "visible_equipment",

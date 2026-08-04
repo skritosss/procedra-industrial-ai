@@ -316,14 +316,14 @@ def _embedding_bundle(
             return (
                 embeddings[0],
                 {_chunk_key(chunk): embeddings[index + 1] for index, chunk in enumerate(chunks)},
-                "openai",
+                "model",
             )
         except (ProviderError, ValueError, IndexError, AttributeError):
             pass
     return (
         _local_embedding(query),
         {_chunk_key(chunk): chunk.local_embedding for chunk in chunks},
-        "local",
+        "deterministic",
     )
 
 
@@ -387,7 +387,7 @@ def _cosine_similarity(left: tuple[float, ...], right: tuple[float, ...]) -> flo
 
 
 def _semantic_threshold(embedding_mode: str) -> float:
-    return 0.18 if embedding_mode == "local" else 0.1
+    return 0.18 if embedding_mode == "deterministic" else 0.1
 
 
 def _chunk_key(chunk: DocumentChunk) -> tuple[str, int]:

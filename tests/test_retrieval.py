@@ -321,6 +321,6 @@ def test_embedding_bundle_falls_back_to_local_when_openai_embedding_fails(monkey
 
     query_embedding, chunk_embeddings, mode = local_index._embedding_bundle("проверить ограждение", chunks)
 
-    assert mode == "local"
+    assert mode == "deterministic"
     assert query_embedding
     assert chunk_embeddings

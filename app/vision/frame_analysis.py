@@ -47,11 +47,11 @@ def analyze_keyframes(keyframes: list[Keyframe]) -> list[FrameAnalysis]:
     if not keyframes:
         return []
     if not settings.openai_enabled or not settings.openai_api_key:
-        return [_fallback_analysis(keyframe, "openai_disabled") for keyframe in keyframes]
+        return [_fallback_analysis(keyframe, "model_disabled") for keyframe in keyframes]
 
     provider = vision_provider(settings)
     if provider is None:
-        return [_fallback_analysis(keyframe, "openai_disabled") for keyframe in keyframes]
+        return [_fallback_analysis(keyframe, "model_disabled") for keyframe in keyframes]
     analyses = []
     max_openai_frames = max(1, settings.vision_max_keyframes)
     for index, keyframe in enumerate(keyframes):
@@ -148,7 +148,7 @@ def _analyze_keyframe_with_model(
     return FrameAnalysis(
         frame_index=keyframe.frame_index,
         timestamp_seconds=keyframe.timestamp_seconds,
-        analysis_mode="openai",
+        analysis_mode="model",
         **payload.model_dump(),
     )
 

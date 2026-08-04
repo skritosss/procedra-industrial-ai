@@ -110,7 +110,7 @@ def generate_instruction(request: InstructionRequest) -> InstructionResponse:
     return InstructionResponse(
         instruction=instruction,
         markdown=render_instruction_markdown(instruction),
-        generation_mode="openai",
+        generation_mode="model",
         evaluation=evaluate_instruction(instruction, request),
     )
 
@@ -168,7 +168,7 @@ def _fallback_response(request: InstructionRequest) -> InstructionResponse:
     return InstructionResponse(
         instruction=instruction,
         markdown=render_instruction_markdown(instruction),
-        generation_mode="fallback",
+        generation_mode="deterministic",
         evaluation=evaluate_instruction(instruction, request),
     )
 

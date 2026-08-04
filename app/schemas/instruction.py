@@ -388,13 +388,33 @@ class StepFrameLink(BaseModel):
         return stripped or None
 
 
+GenerationMode = Literal["model", "deterministic"]
+
+# Rows written before ADR-0001 carry the vendor name in the payload JSON. The
+# value is not part of the audit hash and not part of the instruction id, so it
+# is safe to translate — but it is validated on read, and narrowing the literal
+# without this map would make every stored instruction unreadable.
+LEGACY_GENERATION_MODES = {"openai": "model", "fallback": "deterministic"}
+
+
+def normalize_generation_mode(value: object) -> object:
+    if isinstance(value, str):
+        return LEGACY_GENERATION_MODES.get(value, value)
+    return value
+
+
 class InstructionResponse(BaseModel):
     instruction: WorkInstruction
     markdown: str
-    generation_mode: Literal["openai", "fallback"]
+    generation_mode: GenerationMode
     evaluation: InstructionEvaluation
     sources: list[RetrievedSource] = Field(default_factory=list, max_length=30)
     step_frame_links: list[StepFrameLink] = Field(default_factory=list, max_length=32)
+
+    @field_validator("generation_mode", mode="before")
+    @classmethod
+    def accept_legacy_generation_mode(cls, value: object) -> object:
+        return normalize_generation_mode(value)
 
 
 def _clean_string_list(value):
