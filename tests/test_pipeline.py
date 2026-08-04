@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from openai import OpenAIError
+from app.providers.errors import ProviderUnavailableError
 
 from app.generation import pipeline
 from app.generation.fallback import generate_fallback_instruction
@@ -56,9 +56,9 @@ def test_pipeline_falls_back_when_openai_fails(monkeypatch) -> None:
     )
 
     def fail_generation(*args, **kwargs):
-        raise OpenAIError("quota unavailable")
+        raise ProviderUnavailableError("openai_api", "quota unavailable")
 
-    monkeypatch.setattr(pipeline, "_generate_with_openai", fail_generation)
+    monkeypatch.setattr(pipeline, "_generate_with_model", fail_generation)
 
     response = pipeline.generate_instruction(request)
 
@@ -80,7 +80,7 @@ def test_pipeline_falls_back_when_openai_output_is_invalid(monkeypatch) -> None:
     def invalid_generation(*args, **kwargs):
         raise ValueError("invalid model payload")
 
-    monkeypatch.setattr(pipeline, "_generate_with_openai", invalid_generation)
+    monkeypatch.setattr(pipeline, "_generate_with_model", invalid_generation)
 
     response = pipeline.generate_instruction(request)
 
@@ -300,7 +300,7 @@ def test_mocked_llm_cannot_mark_untrusted_context_as_confirmed(monkeypatch) -> N
             openai_timeout_seconds=1,
         ),
     )
-    monkeypatch.setattr(pipeline, "_generate_with_openai", lambda **kwargs: model_instruction)
+    monkeypatch.setattr(pipeline, "_generate_with_model", lambda **kwargs: model_instruction)
 
     response = pipeline.generate_instruction(request)
 

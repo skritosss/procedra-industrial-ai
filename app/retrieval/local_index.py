@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from openai import OpenAI, OpenAIError
 
 from app.core.settings import get_settings
+from app.providers.errors import ProviderError
+from app.providers.openai_api import OpenAICompatibleEmbeddingProvider
+from app.providers.registry import EMBEDDING_DIMENSIONS
 from app.retrieval.public_sources import retrieve_public_sources
 from app.schemas.instruction import ContextGenerationRequest, RetrievedSource
 
@@ -310,13 +312,13 @@ def _embedding_bundle(
         timeout = getattr(settings, "openai_timeout_seconds", 10.0)
         try:
             texts = (_embedding_input(query), *(_embedding_input(chunk.text) for chunk in chunks))
-            embeddings = _openai_embeddings(texts, api_key, model, timeout)
+            embeddings = _model_embeddings(texts, api_key, model, timeout)
             return (
                 embeddings[0],
                 {_chunk_key(chunk): embeddings[index + 1] for index, chunk in enumerate(chunks)},
                 "openai",
             )
-        except (OpenAIError, ValueError, IndexError, AttributeError):
+        except (ProviderError, ValueError, IndexError, AttributeError):
             pass
     return (
         _local_embedding(query),
@@ -325,18 +327,25 @@ def _embedding_bundle(
     )
 
 
-def _openai_embeddings(
+def _model_embeddings(
     texts: tuple[str, ...],
     api_key: str,
     model: str,
     timeout: float,
 ) -> tuple[tuple[float, ...], ...]:
-    client = OpenAI(api_key=api_key, timeout=timeout)
-    response = client.embeddings.create(model=model, input=list(texts))
-    ordered = sorted(response.data, key=lambda item: item.index)
-    if len(ordered) != len(texts):
-        raise ValueError("Embedding response size mismatch")
-    return tuple(tuple(float(value) for value in item.embedding) for item in ordered)
+    """Ask the configured provider for vectors.
+
+    The vendor SDK used to be constructed here. It now lives behind
+    `app/providers/`, which is the only place allowed to import it, so this
+    module no longer knows or cares which endpoint answers.
+    """
+    provider = OpenAICompatibleEmbeddingProvider(
+        api_key=api_key,
+        model=model,
+        timeout=timeout,
+        dimensions=EMBEDDING_DIMENSIONS,
+    )
+    return provider.embed(texts)
 
 
 def _local_embedding(text: str) -> tuple[float, ...]:

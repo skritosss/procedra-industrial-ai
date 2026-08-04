@@ -1213,8 +1213,8 @@ def test_analyze_keyframes_respects_openai_frame_limit(monkeypatch, tmp_path) ->
     )
     monkeypatch.setattr(
         frame_analysis,
-        "_analyze_keyframe_with_openai",
-        lambda client, model, keyframe, max_image_bytes: FrameAnalysis(
+        "_analyze_keyframe_with_model",
+        lambda provider, keyframe, max_image_bytes: FrameAnalysis(
             frame_index=keyframe.frame_index,
             timestamp_seconds=keyframe.timestamp_seconds,
             summary="openai",

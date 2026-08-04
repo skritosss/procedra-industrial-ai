@@ -94,3 +94,31 @@ def test_provider_package_exports_no_vendor_sdk() -> None:
     # Stage 1.1 adds interfaces only. Anything that imports a vendor SDK arrives
     # in 1.2, and only inside this package.
     assert not hasattr(providers, "OpenAI")
+
+
+def test_no_vendor_sdk_is_imported_outside_the_provider_package() -> None:
+    import ast
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[1]
+    provider_package = project_root / "app" / "providers"
+    offenders: list[str] = []
+
+    for path in sorted((project_root / "app").rglob("*.py")):
+        if provider_package in path.parents:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            if any(name == "openai" or name.startswith("openai.") for name in names):
+                offenders.append(f"{path.relative_to(project_root)}:{node.lineno}")
+
+    # ADR-0001 makes this a property of the codebase rather than a convention:
+    # the point of the provider layer is that swapping the endpoint touches one
+    # package. An import here is how that guarantee quietly rots.
+    assert offenders == [], f"vendor SDK imported outside app/providers: {offenders}"

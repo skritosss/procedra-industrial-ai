@@ -4,11 +4,12 @@ from json import JSONDecodeError
 import mimetypes
 from pathlib import Path
 
-from openai import OpenAI, OpenAIError
-from openai.types.responses import EasyInputMessageParam, ResponseTextConfigParam
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.settings import get_settings
+from app.providers.base import VisionProvider
+from app.providers.errors import ProviderError
+from app.providers.registry import vision_provider
 from app.schemas.video import FrameAnalysis, Keyframe, VideoSegment
 
 
@@ -48,7 +49,9 @@ def analyze_keyframes(keyframes: list[Keyframe]) -> list[FrameAnalysis]:
     if not settings.openai_enabled or not settings.openai_api_key:
         return [_fallback_analysis(keyframe, "openai_disabled") for keyframe in keyframes]
 
-    client = OpenAI(api_key=settings.openai_api_key, timeout=settings.openai_timeout_seconds)
+    provider = vision_provider(settings)
+    if provider is None:
+        return [_fallback_analysis(keyframe, "openai_disabled") for keyframe in keyframes]
     analyses = []
     max_openai_frames = max(1, settings.vision_max_keyframes)
     for index, keyframe in enumerate(keyframes):
@@ -56,8 +59,8 @@ def analyze_keyframes(keyframes: list[Keyframe]) -> list[FrameAnalysis]:
             analyses.append(_fallback_analysis(keyframe, "vision_skipped_limit"))
             continue
         try:
-            analyses.append(_analyze_keyframe_with_openai(client, settings.openai_vision_model, keyframe, settings.vision_max_image_bytes))
-        except (OpenAIError, JSONDecodeError, ValidationError, ValueError, OSError):
+            analyses.append(_analyze_keyframe_with_model(provider, keyframe, settings.vision_max_image_bytes))
+        except (ProviderError, JSONDecodeError, ValidationError, ValueError, OSError):
             analyses.append(_fallback_analysis(keyframe, "vision_fallback"))
     return analyses
 
@@ -125,30 +128,23 @@ def build_video_segment_context(segments: list[VideoSegment]) -> str:
     return "\n\n".join(parts)
 
 
-def _analyze_keyframe_with_openai(client: OpenAI, model: str, keyframe: Keyframe, max_image_bytes: int) -> FrameAnalysis:
+def _analyze_keyframe_with_model(
+    provider: VisionProvider, keyframe: Keyframe, max_image_bytes: int
+) -> FrameAnalysis:
     image_path = PROJECT_ROOT / keyframe.image_path
     image_data_url = _image_data_url(image_path, max_image_bytes)
-    input_message: EasyInputMessageParam = {
-        "role": "user",
-        "content": [
-            {
-                "type": "input_text",
-                "text": (
-                    "Опиши кадр для производственной инструкции. "
-                    f"Таймкод: {keyframe.timestamp_seconds}s, индекс кадра: {keyframe.frame_index}."
-                ),
-            },
-            {"type": "input_image", "image_url": image_data_url, "detail": "auto"},
-        ],
-    }
-    text_config: ResponseTextConfigParam = {"format": {"type": "json_object"}}
-    response = client.responses.create(
-        model=model,
-        instructions=VISION_PROMPT,
-        input=[input_message],
-        text=text_config,
+    raw = provider.describe_image_json(
+        system=VISION_PROMPT,
+        prompt=(
+            "Опиши кадр для производственной инструкции. "
+            f"Таймкод: {keyframe.timestamp_seconds}s, индекс кадра: {keyframe.frame_index}."
+        ),
+        image_data_url=image_data_url,
     )
-    payload = _FrameAnalysisPayload.model_validate(json.loads(response.output_text))
+    # Parsing and validation stay here, next to the fallback that handles a bad
+    # payload. Moving them into the provider would put the instruction schema
+    # inside the provider boundary — see ADR-0001.
+    payload = _FrameAnalysisPayload.model_validate(json.loads(raw))
     return FrameAnalysis(
         frame_index=keyframe.frame_index,
         timestamp_seconds=keyframe.timestamp_seconds,

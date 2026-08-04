@@ -2,10 +2,12 @@ import json
 from json import JSONDecodeError
 from pathlib import Path
 
-from openai import OpenAI, OpenAIError
 from pydantic import ValidationError
 
 from app.core.settings import get_settings
+from app.providers.base import TextProvider
+from app.providers.errors import ProviderError
+from app.providers.registry import text_provider
 from app.evaluation.quality import evaluate_instruction
 from app.evaluation.safety import enforce_provenance_and_safety, link_evidence_claims_to_sources
 from app.generation.fallback import generate_fallback_instruction
@@ -93,17 +95,13 @@ If information is missing, state what must be verified locally instead of preten
 
 def generate_instruction(request: InstructionRequest) -> InstructionResponse:
     settings = get_settings()
-    if not settings.openai_enabled or not settings.openai_api_key:
+    provider = text_provider(settings)
+    if provider is None:
         return _fallback_response(request)
 
     try:
-        instruction = _generate_with_openai(
-            request=request,
-            api_key=settings.openai_api_key,
-            model=settings.openai_model,
-            timeout=settings.openai_timeout_seconds,
-        )
-    except (OpenAIError, JSONDecodeError, ValidationError, ValueError):
+        instruction = _generate_with_model(request=request, provider=provider)
+    except (ProviderError, JSONDecodeError, ValidationError, ValueError):
         return _fallback_response(request)
     instruction = enforce_provenance_and_safety(
         focus_instruction_on_request(improve_instruction_quality(instruction, request), request),
@@ -187,13 +185,7 @@ def _compact_generation_context(context: str | None, max_chars: int = 12_000) ->
     return context[:head_chars].rstrip() + marker + context[-tail_chars:].lstrip()
 
 
-def _generate_with_openai(
-    request: InstructionRequest,
-    api_key: str,
-    model: str,
-    timeout: float,
-) -> WorkInstruction:
-    client = OpenAI(api_key=api_key, timeout=timeout)
+def _generate_with_model(request: InstructionRequest, provider: TextProvider) -> WorkInstruction:
     user_input = {
         "task": request.task,
         "user_level": request.user_level,
@@ -204,12 +196,12 @@ def _generate_with_openai(
         "industry_profile": request.industry_profile,
         "technical_context": request.technical_context,
     }
-    response = client.responses.create(
-        model=model,
-        instructions=SYSTEM_PROMPT,
-        input="Return valid JSON for this work-instruction request:\n"
+    raw = provider.complete_json(
+        system=SYSTEM_PROMPT,
+        prompt="Return valid JSON for this work-instruction request:\n"
         + json.dumps(user_input, ensure_ascii=False),
-        text={"format": {"type": "json_object"}},
     )
-    payload = json.loads(response.output_text)
+    # Parsing and validation stay on this side of the boundary, beside the
+    # fallback that handles a bad payload — see ADR-0001.
+    payload = json.loads(raw)
     return WorkInstruction.model_validate(payload)

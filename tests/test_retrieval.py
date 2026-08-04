@@ -317,7 +317,7 @@ def test_embedding_bundle_falls_back_to_local_when_openai_embedding_fails(monkey
             },
         )(),
     )
-    monkeypatch.setattr(local_index, "_openai_embeddings", lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(local_index, "_model_embeddings", lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad")))
 
     query_embedding, chunk_embeddings, mode = local_index._embedding_bundle("проверить ограждение", chunks)
 
