@@ -18,13 +18,17 @@ from app.schemas.instruction import ContextGenerationRequest, IndustryProfile  #
 
 DEFAULT_SCENARIOS = PROJECT_ROOT / "examples" / "demo_scenarios.json"
 DEFAULT_OUTPUT = PROJECT_ROOT / "reports" / "demo_eval_report.json"
-CHECK_THRESHOLDS = {
+CHECK_THRESHOLDS: dict[str, Any] = {
     "minimum_steps": 5,
     "minimum_criteria": 10,
     "minimum_score": 60,
     "minimum_sources": 8,
     "external_majority": True,
+    "max_risk_level": "high",
 }
+# Ordered from safest. An unknown level is not treated as safe: the gate has to
+# see a level to let a scenario through.
+RISK_ORDER = ("low", "medium", "high", "critical")
 
 
 class DemoScenario(BaseModel):
@@ -217,10 +221,11 @@ def _quality_checks(scenario: dict[str, Any], data: dict[str, Any]) -> dict[str,
     ).lower()
     return {
         "instruction_present": bool(instruction.get("title") and instruction.get("steps")),
-        "minimum_steps": len(instruction.get("steps", [])) >= 5,
-        "evaluation_present": bool(evaluation.get("criteria")) and len(evaluation.get("criteria", [])) >= 10,
-        "score_threshold": int(evaluation.get("overall_score", 0)) >= 60,
-        "sources_present": len(sources) >= 8,
+        "minimum_steps": len(instruction.get("steps", [])) >= CHECK_THRESHOLDS["minimum_steps"],
+        "evaluation_present": bool(evaluation.get("criteria"))
+        and len(evaluation.get("criteria", [])) >= CHECK_THRESHOLDS["minimum_criteria"],
+        "score_threshold": int(evaluation.get("overall_score", 0)) >= CHECK_THRESHOLDS["minimum_score"],
+        "sources_present": len(sources) >= CHECK_THRESHOLDS["minimum_sources"],
         "external_majority": len(public_sources) > len(sources) / 2,
         "source_metadata": all(source.get("document_type") and source.get("contribution_reason") for source in sources),
         "expected_profile_sources": any(expected_profile in source.get("applicable_profiles", []) for source in sources)
@@ -228,7 +233,17 @@ def _quality_checks(scenario: dict[str, Any], data: dict[str, Any]) -> dict[str,
         else True,
         "safety_content": any(term in combined_text for term in ["безопас", "риск", "опасн", "сиз", "провер"]),
         "expert_review": bool(instruction.get("expert_review_questions") or evaluation.get("expert_review_required")),
+        # The product itself blocks approval on a critical risk level, so a demo
+        # pack that reports one is not a pack worth showing. Without this the
+        # gate could pass a scenario the application would refuse to approve.
+        "risk_level_acceptable": _risk_level_acceptable(evaluation.get("risk_level")),
     }
+
+
+def _risk_level_acceptable(risk_level: Any) -> bool:
+    if risk_level not in RISK_ORDER:
+        return False
+    return RISK_ORDER.index(risk_level) <= RISK_ORDER.index(CHECK_THRESHOLDS["max_risk_level"])
 
 
 def _issues_from_checks(checks: dict[str, bool]) -> list[str]:

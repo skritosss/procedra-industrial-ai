@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import sys
@@ -31,6 +31,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.evaluation import quality  # noqa: E402
 from app.evaluation.quality import evaluate_instruction  # noqa: E402
 from app.main import app  # noqa: E402
 from app.schemas.instruction import (  # noqa: E402
@@ -53,6 +54,7 @@ _STUFFING = (
 
 @dataclass(frozen=True)
 class CheckStat:
+    criterion: str
     check: str
     pass_rate: float
     passed: int
@@ -213,6 +215,105 @@ def _placeholder_control_points(instruction: WorkInstruction) -> WorkInstruction
     return damaged
 
 
+
+_ESCALATION_WORDS = ("мастер", "ответствен", "руководител", "специалист", "технолог", "диспетчер")
+_STOP_WORDS = ("не возобновлять", "не продолжать", "запрещ", "остановить", "прекратить")
+
+
+def _strip_words(text: str, words: tuple[str, ...], replacement: str = "участник работ") -> str:
+    lowered = text
+    for word in words:
+        start = 0
+        while True:
+            index = lowered.casefold().find(word, start)
+            if index == -1:
+                break
+            end = index
+            while end < len(lowered) and lowered[end].isalpha():
+                end += 1
+            lowered = lowered[:index] + replacement + lowered[end:]
+            start = index + len(replacement)
+    return lowered
+
+
+def _apply_to_text_fields(instruction: WorkInstruction, transform) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.title = transform(damaged.title)
+    damaged.purpose = transform(damaged.purpose)
+    damaged.scope = transform(damaged.scope)
+    if damaged.department:
+        damaged.department = transform(damaged.department)
+    if damaged.equipment:
+        damaged.equipment = transform(damaged.equipment)
+    # `_instruction_text` concatenates these too, so a partial sweep leaves the
+    # vocabulary alive and makes the check look unkillable when it is not.
+    damaged.required_ppe = [transform(item) for item in damaged.required_ppe]
+    damaged.required_tools = [transform(item) for item in damaged.required_tools]
+    damaged.observed_facts = [transform(item) for item in damaged.observed_facts]
+    damaged.safety_requirements = [transform(item) for item in damaged.safety_requirements]
+    damaged.hazard_zones = [transform(item) for item in damaged.hazard_zones]
+    damaged.prerequisites = [transform(item) for item in damaged.prerequisites]
+    damaged.control_points = [transform(item) for item in damaged.control_points]
+    damaged.quality_checklist = [transform(item) for item in damaged.quality_checklist]
+    damaged.emergency_actions = [transform(item) for item in damaged.emergency_actions]
+    damaged.common_mistakes = [transform(item) for item in damaged.common_mistakes]
+    damaged.local_verification_required = [transform(item) for item in damaged.local_verification_required]
+    damaged.expert_review_questions = [transform(item) for item in damaged.expert_review_questions]
+    for step in damaged.steps:
+        step.action = transform(step.action)
+        step.expected_result = transform(step.expected_result)
+        if step.safety_note:
+            step.safety_note = transform(step.safety_note)
+        if step.verification_method:
+            step.verification_method = transform(step.verification_method)
+        step.common_mistakes = [transform(item) for item in step.common_mistakes]
+    return damaged
+
+
+def _strip_escalation(instruction: WorkInstruction) -> WorkInstruction:
+    """Remove every named role, so nobody is told who to escalate to."""
+    return _apply_to_text_fields(instruction, lambda text: _strip_words(text, _ESCALATION_WORDS))
+
+
+def _permissive_stop_rules(instruction: WorkInstruction) -> WorkInstruction:
+    """Turn stop-work language into permission to carry on."""
+
+    def transform(text: str) -> str:
+        result = _strip_words(text, _STOP_WORDS, replacement="продолжать работу")
+        return result.replace("нельзя", "можно").replace("недопустимо", "допустимо")
+
+    return _apply_to_text_fields(instruction, transform)
+
+
+def _strip_profile_risk_terms(instruction: WorkInstruction) -> WorkInstruction:
+    """Remove the vocabulary the profile risk check looks for.
+
+    The union of every profile's terms, because a mutation applies to an
+    instruction without knowing which profile produced it. A copy of the
+    evaluator's vocabulary can drift, so the drift is made loud rather than
+    silent: a profile added there and missed here leaves the check unkilled in
+    that scenario, and this mutation shows up in `undetected_mutations`.
+    """
+    terms = (
+        "аварийн", "безопасн", "вложен", "диспетчер", "документ", "заявител",
+        "зон", "иб", "инструктаж", "локализ", "маркиров", "наблюден",
+        "неисправ", "огражд", "оповещ", "опасн", "осмотр", "останов",
+        "ответствен", "отход", "парт", "перекры", "персональн", "провер",
+        "санитар", "сиз", "сообщ", "ссыл", "учен", "эвакуац",
+    )
+    return _apply_to_text_fields(instruction, lambda text: _strip_words(text, terms, replacement="узел"))
+
+
+def _insert_guard_bypass(instruction: WorkInstruction) -> WorkInstruction:
+    """Bury an interlock bypass inside otherwise careful wording."""
+    damaged = _copy(instruction)
+    damaged.steps[0].action = (
+        "Соблюдая требования охраны труда и используя средства защиты, "
+        "обойти блокировку для ускорения выхода на режим."
+    )
+    return damaged
+
+
 MUTATIONS: tuple[MutationCase, ...] = (
     MutationCase(
         "placeholder_ppe",
@@ -293,6 +394,30 @@ MUTATIONS: tuple[MutationCase, ...] = (
         _confirm_unverified_claims,
     ),
     MutationCase(
+        "strip_escalation",
+        ("domain_risk_control",),
+        "no responsible role is named anywhere",
+        _strip_escalation,
+    ),
+    MutationCase(
+        "permissive_stop_rules",
+        ("domain_risk_control",),
+        "stop-work wording replaced with permission to continue",
+        _permissive_stop_rules,
+    ),
+    MutationCase(
+        "strip_profile_risk_terms",
+        ("domain_risk_control",),
+        "profile risk vocabulary removed from the text",
+        _strip_profile_risk_terms,
+    ),
+    MutationCase(
+        "insert_guard_bypass",
+        ("domain_risk_control",),
+        "an interlock bypass wrapped in safety-sounding words",
+        _insert_guard_bypass,
+    ),
+    MutationCase(
         "placeholder_control_points",
         ("completeness", "implementation_readiness"),
         "control points present but empty of meaning",
@@ -320,53 +445,92 @@ def build_baselines(limit: int | None) -> list[tuple[str, WorkInstruction, Instr
     return baselines
 
 
+@contextmanager
+def _recording_checks(sink: dict[tuple[str, str], list[float]]):
+    """Capture each check by identity while evaluations run.
+
+    `CriterionScore` keeps only rendered text, and one check can render as
+    several different strings: a distinct wording on failure via `issue_labels`,
+    and a "(выполнено на N%)" suffix per graded value. Counting those strings
+    splits one check across several rows and reports the positive spelling as
+    never failing. Identical wording reused by two criteria has the opposite
+    problem — «указаны СИЗ» exists in both `completeness` and `safety`, and
+    merging them hides a check that is dead in one of them.
+
+    Every criterion funnels through `_criterion`, so wrapping it records the raw
+    `checks` mapping, whose keys are the stable identity of each check inside its
+    criterion. Calling the ten `_score_*` functions directly would work too, but
+    they have three different signatures: the harness would need a dispatch table
+    that silently skips any criterion added later — exactly the blind spot this
+    tool exists to find.
+    """
+    original = quality._criterion
+
+    def recording(name, checks, issue_labels=None):
+        for label, outcome in checks.items():
+            sink.setdefault((name, label), []).append(quality._check_value(outcome))
+        return original(name, checks, issue_labels)
+
+    quality._criterion = recording
+    try:
+        yield
+    finally:
+        quality._criterion = original
+
+
 def run(limit: int | None = None) -> DiscriminationReport:
     baselines = build_baselines(limit)
-    check_pass: Counter[str] = Counter()
-    check_total: Counter[str] = Counter()
+    observations: dict[tuple[str, str], list[float]] = {}
     mutation_rows: list[dict[str, object]] = []
     baseline_scores: list[int] = []
 
-    for scenario_id, instruction, source_request in baselines:
-        base_evaluation = evaluate_instruction(instruction, source_request)
-        baseline_scores.append(base_evaluation.overall_score)
-        base_criteria = {item.criterion: item.score for item in base_evaluation.criteria}
-        _tally(base_evaluation, check_pass, check_total)
+    # Recording starts after the baselines are generated: producing them runs an
+    # evaluation of its own, and counting those would make `evaluated` disagree
+    # with the number of evaluations the report claims.
+    with _recording_checks(observations):
+        for scenario_id, instruction, source_request in baselines:
+            base_evaluation = evaluate_instruction(instruction, source_request)
+            baseline_scores.append(base_evaluation.overall_score)
+            base_criteria = {item.criterion: item.score for item in base_evaluation.criteria}
 
-        for mutation in MUTATIONS:
-            damaged = mutation.apply(instruction)
-            evaluation = evaluate_instruction(damaged, source_request)
-            _tally(evaluation, check_pass, check_total)
-            criteria = {item.criterion: item.score for item in evaluation.criteria}
-            dropped = sorted(
-                name for name, score in criteria.items() if score < base_criteria[name]
-            )
-            detected = [target for target in mutation.targets if target in dropped]
-            mutation_rows.append(
-                {
-                    "scenario": scenario_id,
-                    "mutation": mutation.name,
-                    "describes": mutation.describe,
-                    "targets": list(mutation.targets),
-                    "overall_before": base_evaluation.overall_score,
-                    "overall_after": evaluation.overall_score,
-                    "criteria_dropped": dropped,
-                    "targets_detected": detected,
-                    "undetected": not detected,
-                }
-            )
+            for mutation in MUTATIONS:
+                damaged = mutation.apply(instruction)
+                evaluation = evaluate_instruction(damaged, source_request)
+                criteria = {item.criterion: item.score for item in evaluation.criteria}
+                dropped = sorted(
+                    name for name, score in criteria.items() if score < base_criteria[name]
+                )
+                detected = [target for target in mutation.targets if target in dropped]
+                mutation_rows.append(
+                    {
+                        "scenario": scenario_id,
+                        "mutation": mutation.name,
+                        "describes": mutation.describe,
+                        "targets": list(mutation.targets),
+                        "overall_before": base_evaluation.overall_score,
+                        "overall_after": evaluation.overall_score,
+                        "criteria_dropped": dropped,
+                        "targets_detected": detected,
+                        "undetected": not detected,
+                    }
+                )
 
     undetected = sorted({str(row["mutation"]) for row in mutation_rows if row["undetected"]})
-    checks: list[CheckStat] = [
-        CheckStat(
-            check=label,
-            pass_rate=round(check_pass[label] / total, 4),
-            passed=check_pass[label],
-            evaluated=total,
+    checks: list[CheckStat] = []
+    for (criterion, label), values in sorted(observations.items()):
+        passed = sum(1 for value in values if value >= quality._CHECK_PASS_THRESHOLD)
+        checks.append(
+            CheckStat(
+                criterion=criterion,
+                check=label,
+                pass_rate=round(passed / len(values), 4),
+                passed=passed,
+                evaluated=len(values),
+            )
         )
-        for label, total in sorted(check_total.items())
-    ]
-    non_discriminating = sorted(item.check for item in checks if item.pass_rate == 1.0)
+    non_discriminating = sorted(
+        f"{item.criterion} / {item.check}" for item in checks if item.pass_rate == 1.0
+    )
     return DiscriminationReport(
         scenario_count=len(baselines),
         mutation_count=len(MUTATIONS),
@@ -382,13 +546,6 @@ def run(limit: int | None = None) -> DiscriminationReport:
     )
 
 
-def _tally(evaluation, check_pass: Counter[str], check_total: Counter[str]) -> None:
-    for criterion in evaluation.criteria:
-        for label in criterion.strengths:
-            check_pass[label] += 1
-            check_total[label] += 1
-        for label in criterion.issues:
-            check_total[label] += 1
 
 
 def main() -> int:

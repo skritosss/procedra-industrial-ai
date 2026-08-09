@@ -56,9 +56,14 @@ def test_report_lists_undetected_mutations_and_dead_checks() -> None:
     assert report.scenario_count == 1
     assert report.mutation_count == len(harness.MUTATIONS)
     assert len(report.mutations) == len(harness.MUTATIONS)
-    checked = {item.check for item in report.checks}
+    checked = {f"{item.criterion} / {item.check}" for item in report.checks}
     assert set(report.non_discriminating_checks) <= checked
     assert report.ok is (not report.undetected_mutations)
+    # A check is identified by its criterion plus its key, not by the text it
+    # renders: the same wording lives in more than one criterion, and one check
+    # renders differently when it fails.
+    assert len(checked) == len(report.checks)
+    assert {item.evaluated for item in report.checks} == {report.evaluations}
 
 
 def _criterion_score(evaluation, name: str) -> int:
