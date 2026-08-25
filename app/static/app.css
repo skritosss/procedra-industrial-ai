@@ -930,3 +930,50 @@ body.mobile-menu-open { overflow: hidden; }
   .sidebar-wordmark--light { display: none; }
   .sidebar-wordmark--dark { display: block; }
 }
+
+/* ---------- Renderer surfaces the delivery did not cover ---------- */
+/* These blocks are produced by the script, so the stylesheet has to meet them
+   halfway rather than the renderer being rewritten around unused class names. */
+
+.execution-view { max-width: var(--measure-doc); }
+.execution-list { display: flex; flex-direction: column; }
+
+.execution-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-top: var(--hairline) solid var(--line);
+  cursor: pointer;
+}
+
+.execution-item:last-child { border-bottom: var(--hairline) solid var(--line); }
+.execution-item span { display: block; min-width: 0; }
+.execution-item .step-meta { display: block; margin-top: var(--sp-1); color: var(--text-muted); font-size: var(--fs-small); }
+
+/* Shop-floor mode is read at arm's length from a machine, not at a desk. */
+.shop-floor-mode .execution-item { padding: var(--sp-4) 0; font-size: var(--fs-step); }
+.shop-floor-mode .execution-item input { width: 24px; height: 24px; }
+
+.editor-form { display: flex; flex-direction: column; gap: var(--sp-5); max-width: var(--measure-form); }
+.editor-section { display: flex; flex-direction: column; gap: var(--sp-2); }
+.editor-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
+
+.keyframe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-4);
+  max-width: var(--measure-doc);
+}
+
+.keyframe-card { display: flex; flex-direction: column; gap: var(--sp-2); }
+.keyframe-card img { width: 100%; height: auto; border-radius: var(--r-md); border: var(--hairline) solid var(--line); }
+
+.document-item {
+  padding: var(--sp-3) 0;
+  border-top: var(--hairline) solid var(--line);
+  font-size: var(--fs-small);
+}
+
+.step-video-link { display: inline-flex; margin-top: var(--sp-2); font-size: var(--fs-small); }

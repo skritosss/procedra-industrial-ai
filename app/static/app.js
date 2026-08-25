@@ -1366,6 +1366,31 @@ const translations = {
         return payload.task && payload.task.length >= 10 ? payload : null;
       }
 
+      // The stylesheet expects a badge per meaning, never a bare coloured word:
+      // risk, provenance and workflow status each map onto a semantic pair.
+      const BADGE_VARIANTS = {
+        low: "low", medium: "medium", high: "high", critical: "critical",
+        confirmed: "confirmed", requires_local_check: "local-check",
+        hypothesis: "hypothesis", hypothesis_pending_review: "hypothesis-review",
+        draft: "draft", in_review: "review", approved: "approved",
+        rejected: "rejected", in_execution: "executing",
+        public: "public", local: "local",
+      };
+
+      // The bar colour follows the score, so a weak criterion reads as weak
+      // without the reader comparing numbers.
+      function scoreBand(score) {
+        if (score >= 90) return "low";
+        if (score >= 75) return "medium";
+        if (score >= 50) return "high";
+        return "critical";
+      }
+
+      function renderBadge(value, label) {
+        const variant = BADGE_VARIANTS[value] || "neutral";
+        return `<span class="badge badge--${variant}">${escapeHtml(label)}</span>`;
+      }
+
       function renderList(items) {
         const safeItems = items && items.length ? items : [t("noData")];
         return `<ul>${safeItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
@@ -1669,12 +1694,21 @@ const translations = {
         const linksByStep = new Map((payload.step_frame_links || []).map((link) => [link.step_number, link]));
         return `
           <div class="instruction">
-            <section>
-              <h3>${escapeHtml(instruction.title)}</h3>
-              <p>${escapeHtml(instruction.purpose)}</p>
-              <p class="step-meta">${escapeHtml(instruction.scope)}</p>
-              <p class="step-meta">${t("generationMode")}: ${escapeHtml(generationModeLabel(payload.generation_mode))}</p>
-            </section>
+            <div class="doc-head">
+              <div class="doc-meta">
+                ${workflow.status ? renderBadge(workflow.status, workflow.status_label || workflow.status) : ""}
+                ${payload.evaluation && payload.evaluation.risk_level
+                  ? renderBadge(
+                      payload.evaluation.risk_level,
+                      `${t("riskLevel")}: ${translations[language].riskLabels[payload.evaluation.risk_level] || payload.evaluation.risk_level}`,
+                    )
+                  : ""}
+                <span class="doc-meta-text">${escapeHtml(generationModeLabel(payload.generation_mode))}</span>
+              </div>
+              <h3 class="doc-title">${escapeHtml(instruction.title)}</h3>
+              <p class="doc-lede">${escapeHtml(instruction.purpose)}</p>
+              <p class="doc-lede">${escapeHtml(instruction.scope)}</p>
+            </div>
             <section>
               <h3>${t("passport")}</h3>
               <ul>
@@ -1709,28 +1743,40 @@ const translations = {
             <section><h3>${t("prerequisites")}</h3>${renderList(instruction.prerequisites)}</section>
             <section>
               <h3>${t("steps")}</h3>
-              ${instruction.steps
-                .map(
-                  (step) => `
-                    <div class="step">
-                      <strong>${step.number}. ${escapeHtml(step.action)}</strong>
-                      <div class="step-meta">${t("expectedResult")}: ${escapeHtml(step.expected_result)}</div>
-                      ${step.safety_note ? `<div class="step-meta">${t("safetyNote")}: ${escapeHtml(step.safety_note)}</div>` : ""}
-                      ${
-                        step.verification_method
-                          ? `<div class="step-meta">${t("verification")}: ${escapeHtml(step.verification_method)}</div>`
-                          : ""
-                      }
-                      ${
-                        step.common_mistakes && step.common_mistakes.length
-                          ? `<div class="step-meta">${t("commonMistakes")}: ${escapeHtml(step.common_mistakes.join(", "))}</div>`
-                          : ""
-                      }
-                      ${renderStepFrameLink(linksByStep.get(step.number))}
-                    </div>
-                  `,
-                )
-                .join("")}
+              <div class="steps">
+                ${instruction.steps
+                  .map(
+                    (step) => `
+                      <div class="step">
+                        <div class="step-index">${step.number}</div>
+                        <div class="step-body">
+                          <p class="step-action">${escapeHtml(step.action)}</p>
+                          <dl class="step-meta">
+                            <dt>${t("expectedResult")}</dt>
+                            <dd>${escapeHtml(step.expected_result)}</dd>
+                            ${
+                              step.verification_method
+                                ? `<dt>${t("verification")}</dt><dd>${escapeHtml(step.verification_method)}</dd>`
+                                : ""
+                            }
+                            ${
+                              step.common_mistakes && step.common_mistakes.length
+                                ? `<dt>${t("commonMistakes")}</dt><dd>${escapeHtml(step.common_mistakes.join(", "))}</dd>`
+                                : ""
+                            }
+                          </dl>
+                          ${
+                            step.safety_note
+                              ? `<p class="safety-note">${t("safetyNote")}: ${escapeHtml(step.safety_note)}</p>`
+                              : ""
+                          }
+                          ${renderStepFrameLink(linksByStep.get(step.number))}
+                        </div>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
             </section>
             <section><h3>${t("acceptanceCriteria")}</h3>${renderList(acceptanceItems(instruction))}</section>
             <section><h3>${t("controlPoints")}</h3>${renderList(instruction.control_points)}</section>
@@ -1746,20 +1792,23 @@ const translations = {
       function renderEvaluation(payload) {
         const evaluation = payload.evaluation;
         if (!evaluation) {
-          return `<div class="empty-state"><div><h3>${t("noData")}</h3></div></div>`;
+          return `<div class="empty-state"><p class="empty-title">${t("noData")}</p></div>`;
         }
         return `
           <div class="instruction">
             <section class="score-summary">
-              <div class="score-number">${evaluation.overall_score}</div>
-              <div>
-                <h3>${t("overallScore")}</h3>
-                <p>${escapeHtml(evaluation.verdict)}</p>
-                <p><span class="risk-badge">${t("riskLevel")}: ${escapeHtml(translations[language].riskLabels[evaluation.risk_level] || evaluation.risk_level || t("noData"))}</span></p>
-                <p class="step-meta">${t("expertReview")}: ${
-                  evaluation.expert_review_required ? t("expertReviewRequired") : t("expertReviewOptional")
-                }</p>
-              </div>
+              <div class="score-value">${evaluation.overall_score}</div>
+              <div class="score-caption">${t("overallScore")}</div>
+              ${renderBadge(
+                evaluation.risk_level,
+                `${t("riskLevel")}: ${translations[language].riskLabels[evaluation.risk_level] || evaluation.risk_level || t("noData")}`,
+              )}
+            </section>
+            <section>
+              <p class="doc-lede">${escapeHtml(evaluation.verdict)}</p>
+              <p class="criterion-note">${t("expertReview")}: ${
+                evaluation.expert_review_required ? t("expertReviewRequired") : t("expertReviewOptional")
+              }</p>
             </section>
             <section><h3>${t("expertReview")}</h3>${renderList(evaluation.expert_review_notes)}</section>
             <section><h3>${t("safetyFindings")}</h3>${renderList(
@@ -1769,19 +1818,26 @@ const translations = {
             )}</section>
             <section>
               <h3>${t("criteria")}</h3>
-              <div class="criteria-grid">
+              <div class="criteria">
                 ${evaluation.criteria
                   .map(
                     (criterion) => `
-                      <div class="criterion-card">
-                        <div class="criterion-head">
-                          <span>${escapeHtml(translations[language].criterionLabels[criterion.criterion] || criterion.label)}</span>
-                          <span class="criterion-score">${criterion.score}/100</span>
+                      <div class="criterion criterion--${scoreBand(criterion.score)}">
+                        <div>
+                          <div class="criterion-head">
+                            <span class="criterion-name">${escapeHtml(translations[language].criterionLabels[criterion.criterion] || criterion.label)}</span>
+                          </div>
+                          <div class="criterion-note">${t("strengths")}:</div>
+                          ${renderList(criterion.strengths)}
+                          <div class="criterion-note">${t("issues")}:</div>
+                          ${renderIssueList(criterion.issues)}
                         </div>
-                        <div class="step-meta">${t("strengths")}:</div>
-                        ${renderList(criterion.strengths)}
-                        <div class="step-meta">${t("issues")}:</div>
-                        ${renderIssueList(criterion.issues)}
+                        <div class="criterion-score-cell">
+                          <div class="criterion-score">${criterion.score}</div>
+                          <div class="criterion-bar">
+                            <div class="criterion-bar-fill" data-bar-value="${criterion.score}"></div>
+                          </div>
+                        </div>
                       </div>
                     `,
                   )
@@ -1797,20 +1853,26 @@ const translations = {
       function renderSources(payload) {
         const sources = payload.sources || [];
         if (!sources.length) {
-          return `<div class="empty-state"><div><h3>${t("noSources")}</h3></div></div>`;
+          return `<div class="empty-state"><p class="empty-title">${t("noSources")}</p></div>`;
         }
         return `
           <div class="instruction">
             <section>
               <h3>${t("sourceTitle")}</h3>
               <p class="step-meta">${t("sourceExplanation")}</p>
+              <div class="sources">
               ${sources
                 .map(
                   (source) => `
-                    <div class="source-card">
-                      <h3>${escapeHtml(source.title)}</h3>
-                      <p class="step-meta">${t("sourceType")}: ${source.source_type === "public" ? t("sourceTypePublic") : t("sourceTypeLocal")}</p>
-                      ${source.document_type ? `<p class="step-meta">${t("sourceDocumentType")}: ${escapeHtml(source.document_type)}</p>` : ""}
+                    <div class="source">
+                      <div class="source-head">
+                        ${renderBadge(
+                          source.source_type,
+                          source.source_type === "public" ? t("sourceTypePublic") : t("sourceTypeLocal"),
+                        )}
+                        ${source.document_type ? `<span class="source-kind">${escapeHtml(source.document_type)}</span>` : ""}
+                      </div>
+                      <h3 class="source-title">${escapeHtml(source.title)}</h3>
                       ${source.authority ? `<p class="step-meta">${t("sourceAuthority")}: ${escapeHtml(source.authority)}</p>` : ""}
                       <p class="step-meta">${t("sourceScore")}: ${escapeHtml(source.score)}</p>
                       <p class="step-meta">${t("sourceInfluence")}: ${escapeHtml(formatPercent(source.influence_score || 0))}</p>
@@ -1819,7 +1881,7 @@ const translations = {
                           ? `<p class="step-meta">${t("sourceProfiles")}: ${escapeHtml(formatProfiles(source.applicable_profiles))}</p>`
                           : ""
                       }
-                      ${source.contribution_reason ? `<p class="step-meta">${t("sourceContribution")}: ${escapeHtml(source.contribution_reason)}</p>` : ""}
+                      ${source.contribution_reason ? `<p class="source-reason">${escapeHtml(source.contribution_reason)}</p>` : ""}
                       ${
                         source.matched_terms && source.matched_terms.length
                           ? `<p class="step-meta">${t("matchedTerms")}: ${escapeHtml(source.matched_terms.join(", "))}</p>`
@@ -1835,6 +1897,7 @@ const translations = {
                   `,
                 )
                 .join("")}
+              </div>
             </section>
           </div>
         `;
@@ -1843,7 +1906,7 @@ const translations = {
       function renderVideo() {
         const video = lastVideoPayload;
         if (!video) {
-          return `<div class="empty-state"><div><h3>${t("noVideo")}</h3></div></div>`;
+          return `<div class="empty-state"><p class="empty-title">${t("noVideo")}</p></div>`;
         }
         return `
           <div class="instruction">
@@ -1951,6 +2014,14 @@ const translations = {
         `;
       }
 
+      // Bar widths travel as a data attribute and become a custom property here.
+      // Writing them as a style attribute would be refused by the CSP.
+      function applyBarValues() {
+        result.querySelectorAll("[data-bar-value]").forEach((bar) => {
+          bar.style.setProperty("--bar-value", `${bar.dataset.barValue}%`);
+        });
+      }
+
       function renderResult() {
         revokeProtectedImageUrls();
         syncExportButtons();
@@ -1966,10 +2037,8 @@ const translations = {
         if (!lastPayload) {
           result.innerHTML = `
             <div class="empty-state">
-              <div>
-                <h3>${t("emptyTitle")}</h3>
-                <p>${t("emptyBody")}</p>
-              </div>
+              <p class="empty-title">${t("emptyTitle")}</p>
+              <p class="empty-text">${t("emptyBody")}</p>
             </div>
           `;
           return;
@@ -1986,10 +2055,11 @@ const translations = {
         } else if (activeTab === "sources") {
           result.innerHTML = renderSources(lastPayload);
         } else if (activeTab === "markdown") {
-          result.innerHTML = `<pre>${escapeHtml(lastPayload.markdown)}</pre>`;
+          result.innerHTML = `<pre class="code-view">${escapeHtml(lastPayload.markdown)}</pre>`;
         } else {
-          result.innerHTML = `<pre>${escapeHtml(JSON.stringify(lastPayload, null, 2))}</pre>`;
+          result.innerHTML = `<pre class="code-view">${escapeHtml(JSON.stringify(lastPayload, null, 2))}</pre>`;
         }
+        applyBarValues();
         hydrateProtectedImages();
       }
 
@@ -2269,7 +2339,7 @@ const translations = {
 
       function renderHistory() {
         if (!historyRecords.length) {
-          return `<div class="empty-state"><div><h3>${t("historyEmpty")}</h3></div></div>`;
+          return `<div class="empty-state"><p class="empty-title">${t("historyEmpty")}</p></div>`;
         }
         const renderExecutionSummary = () => {
           if (!executionSummary || !executionSummary.total_runs) {
@@ -2322,23 +2392,32 @@ const translations = {
             ${renderExecutionSummary()}
             <section>
               <h3>${t("historyTitle")}</h3>
+              <div class="history-list">
               ${historyRecords
                 .map(
                   (record) => `
-                    <div class="source-card">
-                      <h3>${escapeHtml(record.title)}</h3>
-                      <p class="step-meta">${t("historyVersion")}: ${escapeHtml(record.version)} · ${t("historyCreated")}: ${escapeHtml(formatDateTime(record.created_at))}</p>
-                      <p class="step-meta">${t("overallScore")}: ${escapeHtml(record.overall_score)}/100 · ${t("riskLevel")}: ${escapeHtml(translations[language].riskLabels[record.risk_level] || record.risk_level)}</p>
-                      <p class="step-meta">${t("workflowStatus")}: ${escapeHtml(record.workflow_status_label || record.workflow_status)}</p>
+                    <div class="history-row">
+                      <div>
+                      <h3 class="history-title">${escapeHtml(record.title)}</h3>
+                      <p class="history-date">${t("historyVersion")}: ${escapeHtml(record.version)} · ${escapeHtml(formatDateTime(record.created_at))}</p>
+                      <p class="criterion-note">${t("overallScore")}: ${escapeHtml(record.overall_score)}/100</p>
+                      <div class="doc-meta">
+                        ${renderBadge(record.risk_level, translations[language].riskLabels[record.risk_level] || record.risk_level)}
+                        ${renderBadge(record.workflow_status, record.workflow_status_label || record.workflow_status)}
+                      </div>
                       ${record.reviewer ? `<p class="step-meta">${t("historyReviewer")}: ${escapeHtml(record.reviewer)}${record.reviewer_role ? ` · ${t("workflowReviewerRole")}: ${escapeHtml(translations[language].reviewerRoles[record.reviewer_role] || record.reviewer_role)}` : ""}</p>` : ""}
 	                      ${record.review_comment ? `<p class="step-meta">${t("historyComment")}: ${escapeHtml(record.review_comment)}</p>` : ""}
 	                      <p class="step-meta">${t("historySources")}: ${escapeHtml(record.source_count)} · ${t("historySteps")}: ${escapeHtml(record.step_count)}</p>
-	                      <button class="secondary-action history-open" type="button" data-history-id="${escapeHtml(record.instruction_id)}" data-history-version="${escapeHtml(record.version)}">${t("historyOpen")}</button>
-	                      ${workflowActions(record)}
+	                      </div>
+	                      <div class="inline-actions">
+	                        <button class="secondary-action history-open" type="button" data-history-id="${escapeHtml(record.instruction_id)}" data-history-version="${escapeHtml(record.version)}">${t("historyOpen")}</button>
+	                        ${workflowActions(record)}
+	                      </div>
 	                    </div>
                   `,
                 )
                 .join("")}
+              </div>
             </section>
           </div>
         `;
