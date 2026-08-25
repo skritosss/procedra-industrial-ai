@@ -300,6 +300,14 @@ const translations = {
           equipmentPlaceholder: "Рабочее место оператора",
           contextPlaceholder:
             "Перед запуском проверить защитные ограждения, аварийную кнопку и отсутствие посторонних предметов.",
+          languageAria: "Язык интерфейса",
+          navAria: "Основная навигация",
+          routeAria: "Ход согласования",
+          routeDraft: "Черновик",
+          routeReview: "На проверке",
+          routeApproved: "Утверждено",
+          toolsToggleHint: "Развернуть",
+          videoUrlPlaceholder: "Ссылка на видео",
           levels: {
             new_operator: "Новый оператор",
             experienced_operator: "Опытный оператор",
@@ -630,6 +638,14 @@ const translations = {
           equipmentPlaceholder: "Operator workplace",
           contextPlaceholder:
             "Before startup, check guards, emergency stop, and absence of foreign objects.",
+          languageAria: "Interface language",
+          navAria: "Main navigation",
+          routeAria: "Approval progress",
+          routeDraft: "Draft",
+          routeReview: "In review",
+          routeApproved: "Approved",
+          toolsToggleHint: "Expand",
+          videoUrlPlaceholder: "Video URL",
           levels: {
             new_operator: "New operator",
             experienced_operator: "Experienced operator",
@@ -2509,13 +2525,21 @@ const translations = {
         }
       }
 
+      function formSubmitButton(formElement) {
+        return (
+          Array.from(formElement.elements).find(
+            (element) => element.type === "submit" && element.tagName === "BUTTON",
+          ) || null
+        );
+      }
+
       async function submitForm(event) {
         event.preventDefault();
         currentHistoryRecord = null;
         currentAuditEvents = [];
         status.textContent = t("statusLoading");
         status.classList.remove("error");
-        form.querySelector("button[type='submit']").disabled = true;
+        formSubmitButton(form).disabled = true;
 
         try {
           const endpoint = document.getElementById("use_context").checked
@@ -2540,7 +2564,7 @@ const translations = {
           status.textContent = `${t("statusError")}: ${error.message}`;
           status.classList.add("error");
         } finally {
-          form.querySelector("button[type='submit']").disabled = false;
+          formSubmitButton(form).disabled = false;
         }
       }
 
@@ -2609,7 +2633,10 @@ const translations = {
 
       function renderVideoJobProgress(job) {
         const progress = Math.max(0, Math.min(100, Number(job.progress_percent) || 0));
-        videoJobProgressBar.value = progress;
+        // The bar is a styled div, not <progress>: width comes from a custom
+        // property. setProperty is CSSOM, so the CSP ban on style attributes holds.
+        videoJobProgressBar.style.setProperty("--progress-value", `${progress}%`);
+        videoJobProgressBar.setAttribute("aria-valuenow", String(progress));
         videoJobProgressBar.textContent = `${progress}%`;
         videoJobProgressLabel.textContent = job.cancel_requested
           ? t("videoStatusCancelRequested")
@@ -2710,7 +2737,7 @@ const translations = {
         status.textContent = t("videoInstructionLoading");
         status.classList.remove("error");
         videoGenerateButton.disabled = true;
-        form.querySelector("button[type='submit']").disabled = true;
+        formSubmitButton(form).disabled = true;
         try {
           const response = await apiFetch("/api/instructions/generate-from-video", {
             method: "POST",
@@ -2737,7 +2764,7 @@ const translations = {
           status.classList.add("error");
         } finally {
           videoGenerateButton.disabled = !(lastVideoPayload && lastVideoPayload.keyframes && lastVideoPayload.keyframes.length);
-          form.querySelector("button[type='submit']").disabled = false;
+          formSubmitButton(form).disabled = false;
         }
       }
 
@@ -2926,6 +2953,8 @@ const translations = {
       function closeMobileMenu({ restoreFocus = false } = {}) {
         sidebar.classList.remove("is-mobile-open");
         sidebarBackdrop.hidden = true;
+        sidebarBackdrop.classList.remove("is-active");
+        document.querySelector(".app-frame").classList.remove("mobile-menu-open");
         document.body.classList.remove("mobile-menu-open");
         mobileMenuToggle.setAttribute("aria-expanded", "false");
         if (restoreFocus) mobileMenuToggle.focus();
@@ -2935,6 +2964,8 @@ const translations = {
         if (!isMobileNavigation()) return;
         sidebar.classList.add("is-mobile-open");
         sidebarBackdrop.hidden = false;
+        sidebarBackdrop.classList.add("is-active");
+        document.querySelector(".app-frame").classList.add("mobile-menu-open");
         document.body.classList.add("mobile-menu-open");
         mobileMenuToggle.setAttribute("aria-expanded", "true");
         sidebarLinks.find((link) => link.getAttribute("aria-current") === "page")?.focus();
@@ -2976,7 +3007,7 @@ const translations = {
 
       sidebarCollapse.addEventListener("click", () => {
         const collapsed = sidebar.classList.toggle("is-collapsed");
-        document.querySelector(".app-shell").classList.toggle("sidebar-is-collapsed", collapsed);
+        document.querySelector(".app-frame").classList.toggle("sidebar-is-collapsed", collapsed);
         sidebarCollapse.setAttribute("aria-expanded", String(!collapsed));
       });
 
@@ -3000,6 +3031,19 @@ const translations = {
         document.getElementById(id).addEventListener("change", resetProcessedVideoState);
       });
       document.getElementById("video_url").addEventListener("input", resetProcessedVideoState);
+      [
+        ["video-tools-toggle", "video-tools"],
+        ["document-tools-toggle", "document-tools"],
+      ].forEach(([toggleId, bodyId]) => {
+        const toggle = document.getElementById(toggleId);
+        if (!toggle) return;
+        toggle.addEventListener("click", () => {
+          const expanded = toggle.getAttribute("aria-expanded") === "true";
+          toggle.setAttribute("aria-expanded", String(!expanded));
+          document.getElementById(bodyId).hidden = expanded;
+        });
+        document.getElementById(bodyId).hidden = toggle.getAttribute("aria-expanded") !== "true";
+      });
       videoButton.addEventListener("click", submitVideo);
       videoCancelButton.addEventListener("click", cancelVideoJob);
       videoGenerateButton.addEventListener("click", submitVideoInstruction);

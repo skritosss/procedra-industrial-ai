@@ -59,10 +59,13 @@ def test_auth_ui_loads_server_capabilities_and_fails_closed() -> None:
 def test_hidden_auth_fields_and_sticky_navigation_have_visual_regressions_guarded() -> None:
     css = _read("app/static/app.css")
 
-    assert "[hidden] {\n  display: none !important;\n}" in css
-    assert "scroll-margin-top: 68px;" in css
-    assert "@media (min-width: 821px) and (max-width: 960px)" in css
-    assert "grid-template-columns: 1fr;" in css
+    # Matched on the rule, not on its formatting: the redesign writes it on one
+    # line. What matters is that `hidden` still wins over the display values the
+    # layout sets, since the script hides panels with the attribute.
+    assert re.search(r"\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}", css)
+    # Below the two-column breakpoint the shell collapses to a single column.
+    assert "@media (max-width: 1180px)" in css
+    assert "grid-template-columns: minmax(0, 1fr);" in css
 
 
 def test_localized_file_pickers_have_visible_names_and_focus_state() -> None:
@@ -78,7 +81,7 @@ def test_localized_file_pickers_have_visible_names_and_focus_state() -> None:
     assert 'chooseFile: "Выбрать файл"' in js
     assert 'noFileSelected: "Файл не выбран"' in js
     assert "function syncSelectedFileNames()" in js
-    assert ".file-picker-input:focus-visible + .file-picker-display" in css
+    assert ".file-picker-input:focus-visible + .file-picker-action" in css
 
 
 def test_claim_provenance_and_safety_findings_are_visible_in_results() -> None:

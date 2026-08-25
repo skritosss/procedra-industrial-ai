@@ -1,300 +1,375 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="application-name" content="Procedra" />
-    <meta name="description" content="Procedra — AI-assisted industrial procedures with source traceability, expert approval, and execution evidence." />
-    <meta name="theme-color" content="#17212B" />
-    <title>Procedra — генератор производственных инструкций</title>
-    <link rel="icon" href="/static/assets/brand/procedra-favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/static/assets/brand/procedra-favicon-32.png" sizes="32x32" type="image/png" />
-    <link rel="apple-touch-icon" href="/static/assets/brand/procedra-apple-touch-icon.png" />
-    <link rel="stylesheet" href="/static/app.css" />
-  </head>
-  <body>
-    <div class="app-shell">
-      <aside class="sidebar" id="primary-sidebar" aria-label="Основная навигация">
-        <div class="sidebar-brand">
-          <img class="sidebar-wordmark" src="/static/assets/brand/procedra-wordmark-reversed.svg" alt="Procedra" />
-          <img class="sidebar-brandmark" src="/static/assets/brand/procedra-favicon.svg" alt="" aria-hidden="true" />
-          <button class="mobile-menu-close" id="mobile-menu-close" type="button" aria-controls="primary-sidebar" data-i18n-aria-label="mobileMenuClose">
-            <img src="/static/vendor/tabler-icons/x.svg" alt="" aria-hidden="true" />
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="application-name" content="Procedra" />
+<meta name="description" content="Procedra — AI-assisted industrial procedures with source traceability, expert approval, and execution evidence." />
+<meta name="theme-color" content="#17212B" />
+<title>Procedra — генератор производственных инструкций</title>
+<link rel="icon" href="/static/assets/brand/procedra-favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/static/assets/brand/procedra-favicon-32.png" sizes="32x32" type="image/png" />
+<link rel="apple-touch-icon" href="/static/assets/brand/procedra-apple-touch-icon.png" />
+<link rel="stylesheet" href="/static/tokens.css" />
+<link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+<div class="app-frame">
+
+  <aside class="sidebar" id="primary-sidebar">
+    <button class="mobile-menu-close" id="mobile-menu-close" type="button" data-i18n-aria-label="mobileMenuClose"><img src="/static/vendor/tabler-icons/x.svg" alt="" aria-hidden="true" />
+      <span data-i18n="mobileMenuClose"></span>
+    </button>
+
+    <div class="sidebar-brand">
+      <span class="sidebar-brandmark" aria-hidden="true">P</span>
+      <img class="sidebar-wordmark sidebar-wordmark--light" src="/static/assets/brand/procedra-wordmark.svg" alt="Procedra" />
+      <img class="sidebar-wordmark sidebar-wordmark--dark" src="/static/assets/brand/procedra-wordmark-reversed.svg" alt="" aria-hidden="true" />
+    </div>
+
+    <nav class="sidebar-nav" data-i18n-aria-label="navAria">
+      <button class="sidebar-link" type="button" data-sidebar-target="generator" data-i18n-aria-label="navGenerator">
+        <img src="/static/vendor/tabler-icons/file-pencil.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navGenerator"></span>
+      </button>
+      <button class="sidebar-link is-active" id="nav-instruction" type="button" data-sidebar-target="instruction" data-result-view="instruction" aria-controls="result" data-i18n-aria-label="navInstructions">
+        <img src="/static/vendor/tabler-icons/file-text.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navInstructions"></span>
+      </button>
+      <button class="sidebar-link" id="nav-editor" type="button" data-sidebar-target="editor" data-result-view="editor" aria-controls="result" data-i18n-aria-label="navEditor">
+        <img src="/static/vendor/tabler-icons/edit.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navEditor"></span>
+      </button>
+      <button class="sidebar-link" id="nav-execution" type="button" data-sidebar-target="execution" data-result-view="execution" aria-controls="result" data-i18n-aria-label="navExecution">
+        <img src="/static/vendor/tabler-icons/list-check.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navExecution"></span>
+      </button>
+      <button class="sidebar-link" id="nav-evaluation" type="button" data-sidebar-target="evaluation" data-result-view="evaluation" aria-controls="result" data-i18n-aria-label="navEvaluation">
+        <img src="/static/vendor/tabler-icons/clipboard-check.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navEvaluation"></span>
+      </button>
+      <button class="sidebar-link" id="nav-sources" type="button" data-sidebar-target="sources" data-result-view="sources" aria-controls="result" data-i18n-aria-label="navSources">
+        <img src="/static/vendor/tabler-icons/database.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navSources"></span>
+      </button>
+      <button class="sidebar-link" id="nav-video" type="button" data-sidebar-target="video" data-result-view="video" aria-controls="result" data-i18n-aria-label="navVideo">
+        <img src="/static/vendor/tabler-icons/video.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navVideo"></span>
+      </button>
+      <button class="sidebar-link" id="nav-history" type="button" data-sidebar-target="history" data-result-view="history" aria-controls="result" data-i18n-aria-label="navHistory">
+        <img src="/static/vendor/tabler-icons/history.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navHistory"></span>
+      </button>
+
+      <div class="sidebar-divider" role="presentation"></div>
+
+      <button class="sidebar-link" id="nav-markdown" type="button" data-sidebar-target="markdown" data-result-view="markdown" aria-controls="result" data-i18n-aria-label="navMarkdown">
+        <img src="/static/vendor/tabler-icons/markdown.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navMarkdown"></span>
+      </button>
+      <button class="sidebar-link" id="nav-json" type="button" data-sidebar-target="json" data-result-view="json" aria-controls="result" data-i18n-aria-label="navJson">
+        <img src="/static/vendor/tabler-icons/braces.svg" alt="" aria-hidden="true" />
+<span class="sidebar-link-label" data-i18n="navJson"></span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="sidebar-collapse" id="sidebar-collapse" type="button" aria-expanded="true"><img src="/static/vendor/tabler-icons/chevron-left.svg" alt="" aria-hidden="true" />
+        <span class="sidebar-collapse-label" data-i18n="navCollapse"></span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+
+    <header class="topbar">
+      <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="primary-sidebar"><img src="/static/vendor/tabler-icons/menu-2.svg" alt="" aria-hidden="true" />
+        <span data-i18n="mobileMenuOpen"></span>
+      </button>
+
+      <div class="mobile-brand">
+        <span class="sidebar-brandmark" aria-hidden="true">P</span>
+      </div>
+
+      <div class="brand">
+        <h1 data-i18n="subtitle"></h1>
+        <span class="brand-separator" aria-hidden="true">/</span>
+        <span class="workspace-context" data-i18n="workspaceContext"></span>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="language-switch" role="group" data-i18n-aria-label="languageAria">
+          <button type="button" data-lang="ru" class="is-active">RU</button>
+          <button type="button" data-lang="en">EN</button>
+        </div>
+        <span class="auth-state" id="auth-state" data-i18n="authGuest"></span>
+        <div class="inline-actions">
+          <button class="secondary-action" id="auth-open" type="button">
+            <span data-i18n="authOpen"></span>
+          </button>
+          <button class="secondary-action" id="auth-logout" type="button">
+            <span data-i18n="authLogout"></span>
           </button>
         </div>
-        <nav class="sidebar-nav">
-          <button class="sidebar-link is-active" type="button" data-sidebar-target="generator" data-i18n-aria-label="navGenerator"><img src="/static/vendor/tabler-icons/file-pencil.svg" alt="" aria-hidden="true" /><span data-i18n="navGenerator"></span></button>
-          <button class="sidebar-link" id="nav-instruction" type="button" data-sidebar-target="instruction" data-result-view="instruction" aria-controls="result" data-i18n-aria-label="navInstructions"><img src="/static/vendor/tabler-icons/file-text.svg" alt="" aria-hidden="true" /><span data-i18n="navInstructions"></span></button>
-          <button class="sidebar-link" id="nav-editor" type="button" data-sidebar-target="editor" data-result-view="editor" aria-controls="result" data-i18n-aria-label="navEditor"><img src="/static/vendor/tabler-icons/edit.svg" alt="" aria-hidden="true" /><span data-i18n="navEditor"></span></button>
-          <button class="sidebar-link" id="nav-execution" type="button" data-sidebar-target="execution" data-result-view="execution" aria-controls="result" data-i18n-aria-label="navExecution"><img src="/static/vendor/tabler-icons/list-check.svg" alt="" aria-hidden="true" /><span data-i18n="navExecution"></span></button>
-          <button class="sidebar-link" id="nav-evaluation" type="button" data-sidebar-target="evaluation" data-result-view="evaluation" aria-controls="result" data-i18n-aria-label="navEvaluation"><img src="/static/vendor/tabler-icons/clipboard-check.svg" alt="" aria-hidden="true" /><span data-i18n="navEvaluation"></span></button>
-          <button class="sidebar-link" id="nav-sources" type="button" data-sidebar-target="sources" data-result-view="sources" aria-controls="result" data-i18n-aria-label="navSources"><img src="/static/vendor/tabler-icons/database.svg" alt="" aria-hidden="true" /><span data-i18n="navSources"></span></button>
-          <button class="sidebar-link" id="nav-video" type="button" data-sidebar-target="video" data-result-view="video" aria-controls="result" data-i18n-aria-label="navVideo"><img src="/static/vendor/tabler-icons/video.svg" alt="" aria-hidden="true" /><span data-i18n="navVideo"></span></button>
-          <button class="sidebar-link" id="nav-history" type="button" data-sidebar-target="history" data-result-view="history" aria-controls="result" data-i18n-aria-label="navHistory"><img src="/static/vendor/tabler-icons/history.svg" alt="" aria-hidden="true" /><span data-i18n="navHistory"></span></button>
-          <div class="sidebar-divider" role="presentation"></div>
-          <button class="sidebar-link" id="nav-markdown" type="button" data-sidebar-target="markdown" data-result-view="markdown" aria-controls="result" data-i18n-aria-label="navMarkdown"><img src="/static/vendor/tabler-icons/markdown.svg" alt="" aria-hidden="true" /><span data-i18n="navMarkdown"></span></button>
-          <button class="sidebar-link" id="nav-json" type="button" data-sidebar-target="json" data-result-view="json" aria-controls="result" data-i18n-aria-label="navJson"><img src="/static/vendor/tabler-icons/braces.svg" alt="" aria-hidden="true" /><span data-i18n="navJson"></span></button>
-        </nav>
-        <button class="sidebar-collapse" id="sidebar-collapse" type="button" aria-expanded="true" data-i18n-aria-label="navCollapse"><img src="/static/vendor/tabler-icons/chevron-left.svg" alt="" aria-hidden="true" /><span data-i18n="navCollapse"></span></button>
-      </aside>
-      <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+      </div>
+    </header>
 
-      <div class="app-frame">
-      <header>
-        <div class="topbar">
-          <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-controls="primary-sidebar" aria-expanded="false" data-i18n-aria-label="mobileMenuOpen">
-            <img src="/static/vendor/tabler-icons/menu-2.svg" alt="" aria-hidden="true" />
+    <div class="layout">
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 data-i18n="formTitle"></h2>
+          <button class="inline-action" id="sample-button" type="button">
+            <span data-i18n="sampleCaseButton"></span>
           </button>
-          <div class="brand">
-            <img class="mobile-brand" src="/static/assets/brand/procedra-wordmark.svg" alt="Procedra" />
-            <div>
-              <h1 data-i18n="subtitle"></h1>
-              <p data-i18n="workspaceContext"></p>
-            </div>
-          </div>
-          <div class="topbar-actions">
-            <div class="auth-panel">
-              <span id="auth-state" data-i18n="authGuest"></span>
-              <button type="button" id="auth-open" data-i18n="authOpen"></button>
-              <button type="button" id="auth-logout" data-i18n="authLogout" hidden></button>
-            </div>
-            <div class="language-switch" role="group" aria-label="Language">
-              <button type="button" data-lang="ru" aria-pressed="true">RU</button>
-              <button type="button" data-lang="en" aria-pressed="false">EN</button>
-            </div>
-          </div>
         </div>
-      </header>
 
-      <main>
-        <section class="panel">
-          <div class="panel-header">
-            <h2 data-i18n="formTitle"></h2>
-            <p data-i18n="formSubtitle"></p>
+        <form class="panel-scroll" id="instruction-form">
+          <div class="field">
+            <label for="task" data-i18n="taskLabel"></label>
+            <textarea id="task" name="task" rows="3" data-i18n-placeholder="taskPlaceholder"></textarea>
           </div>
-          <form id="instruction-form">
-            <div class="field inline-action">
-              <div>
-                <label for="sample_case" data-i18n="sampleCaseLabel"></label>
-                <select id="sample_case"></select>
-              </div>
-              <button class="secondary-action" id="sample-button" type="button" data-i18n="sampleCaseButton"></button>
-            </div>
 
+          <div class="grid-2">
             <div class="field">
-              <label for="task" data-i18n="taskLabel"></label>
-              <textarea id="task" name="task" required minlength="10"></textarea>
+              <label for="user_level" data-i18n="userLevelLabel"></label>
+              <select id="user_level" name="user_level"></select>
             </div>
-
-            <div class="grid-2">
-              <div class="field">
-                <label for="user_level" data-i18n="userLevelLabel"></label>
-                <select id="user_level" name="user_level"></select>
-              </div>
-              <div class="field">
-                <label for="instruction_type" data-i18n="instructionTypeLabel"></label>
-                <select id="instruction_type" name="instruction_type"></select>
-              </div>
+            <div class="field">
+              <label for="instruction_type" data-i18n="instructionTypeLabel"></label>
+              <select id="instruction_type" name="instruction_type"></select>
             </div>
-
             <div class="field">
               <label for="industry_profile" data-i18n="industryProfileLabel"></label>
               <select id="industry_profile" name="industry_profile"></select>
             </div>
-
             <div class="field">
               <label for="operation_name" data-i18n="operationLabel"></label>
-              <input id="operation_name" name="operation_name" />
+              <input id="operation_name" name="operation_name" type="text" data-i18n-placeholder="operationPlaceholder" />
             </div>
-
-            <div class="grid-2">
-              <div class="field">
-                <label for="department" data-i18n="departmentLabel"></label>
-                <input id="department" name="department" />
-              </div>
-              <div class="field">
-                <label for="equipment" data-i18n="equipmentLabel"></label>
-                <input id="equipment" name="equipment" />
-              </div>
-            </div>
-
             <div class="field">
-              <label for="technical_context" data-i18n="contextLabel"></label>
-              <textarea id="technical_context" name="technical_context"></textarea>
+              <label for="department" data-i18n="departmentLabel"></label>
+              <input id="department" name="department" type="text" data-i18n-placeholder="departmentPlaceholder" />
             </div>
-
-            <label class="checkbox-field">
-              <input id="use_context" name="use_context" type="checkbox" checked />
-              <span data-i18n="useContextLabel"></span>
-            </label>
-
             <div class="field">
-              <label for="api_token" data-i18n="apiTokenLabel"></label>
-              <input id="api_token" type="password" autocomplete="off" />
+              <label for="equipment" data-i18n="equipmentLabel"></label>
+              <input id="equipment" name="equipment" type="text" data-i18n-placeholder="equipmentPlaceholder" />
             </div>
+          </div>
 
-            <div class="field">
-              <label for="max_sources" data-i18n="maxSourcesLabel"></label>
-              <select id="max_sources" name="max_sources">
-                <option value="5">5</option>
-                <option value="10">10</option>
-                <option value="12">12</option>
-                <option value="15" selected>15</option>
-              </select>
-            </div>
+          <div class="field">
+            <label for="technical_context" data-i18n="contextLabel"></label>
+            <textarea id="technical_context" name="technical_context" rows="2" data-i18n-placeholder="contextPlaceholder"></textarea>
+          </div>
 
-            <button class="primary-action" type="submit" data-i18n="generateButton"></button>
-          </form>
+          <label class="checkbox-field" for="use_context">
+            <input id="use_context" name="use_context" type="checkbox" />
+            <span data-i18n="useContextLabel"></span>
+          </label>
+
           <div class="video-panel" aria-labelledby="video-tools-title">
-            <div class="tool-section-header">
-              <h3 id="video-tools-title" data-i18n="videoToolsTitle"></h3>
-              <p data-i18n="videoToolsDescription"></p>
-            </div>
-            <div class="field">
-              <label for="video_url" data-i18n="videoUrlLabel"></label>
-              <input id="video_url" type="url" />
-            </div>
-            <div class="field">
-              <label for="video_file" data-i18n="videoFileLabel"></label>
-              <div class="file-picker">
-                <input class="file-picker-input" id="video_file" type="file" accept="video/*" aria-describedby="video-file-name" />
-                <label class="file-picker-display" for="video_file">
-                  <span class="file-picker-action" data-i18n="chooseFile"></span>
-                  <span class="file-picker-name" id="video-file-name" data-i18n="noFileSelected"></span>
-                </label>
+            <button class="tool-section-header" id="video-tools-toggle" type="button" aria-expanded="false" aria-controls="video-tools">
+              <span id="video-tools-title" data-i18n="videoToolsTitle"></span>
+              <span class="field-hint" data-i18n="toolsToggleHint"></span>
+            </button>
+            <div class="tool-section-body" id="video-tools">
+              <div class="field">
+                <label for="video_url" data-i18n="videoUrlLabel"></label>
+                <input id="video_url" name="video_url" type="url" data-i18n-placeholder="videoUrlPlaceholder" />
               </div>
-            </div>
-            <div class="field">
-              <label for="max_keyframes" data-i18n="maxKeyframesLabel"></label>
-              <select id="max_keyframes">
-                <option value="4">4</option>
-                <option value="8" selected>8</option>
-                <option value="12">12</option>
-                <option value="16">16</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="visual_quality" data-i18n="visualQualityLabel"></label>
-              <select id="visual_quality">
-                <option value="240" data-i18n="visualQualityFast"></option>
-                <option value="360" data-i18n="visualQualityBalanced"></option>
-                <option value="720" selected data-i18n="visualQualityDetailed"></option>
-                <option value="1080" data-i18n="visualQualityMax"></option>
-              </select>
-            </div>
-            <button class="secondary-action" id="video-button" type="button" data-i18n="extractVideoButton"></button>
-            <button class="secondary-action" id="video-generate-button" type="button" data-i18n="generateFromVideoButton"></button>
-            <div class="video-job-progress" id="video-job-progress" aria-live="polite" hidden>
-              <label for="video-job-progress-bar" id="video-job-progress-label" data-i18n="videoStatusLoading"></label>
-              <progress id="video-job-progress-bar" max="100" value="0">0%</progress>
-              <button class="secondary-action" id="video-cancel-button" type="button" data-i18n="cancelVideoJob"></button>
+              <div class="file-picker">
+                <span class="field-label" data-i18n="videoFileLabel"></span>
+                <div class="file-picker-display">
+                  <input class="file-picker-input" id="video_file" name="video_file" type="file" accept="video/*" />
+                  <label class="file-picker-action" for="video_file" data-i18n="chooseFile"></label>
+                  <span class="file-picker-name" id="video-file-name" data-i18n="noFileSelected"></span>
+                </div>
+              </div>
+              <div class="grid-2">
+                <div class="field">
+                  <label for="max_keyframes" data-i18n="maxKeyframesLabel"></label>
+                  <input id="max_keyframes" name="max_keyframes" type="number" min="1" max="16" value="8" />
+                </div>
+                <div class="field">
+                  <label for="visual_quality" data-i18n="visualQualityLabel"></label>
+                  <select id="visual_quality" name="visual_quality"></select>
+                </div>
+              </div>
+              <div class="inline-actions">
+                <button class="secondary-action" id="video-button" type="button" data-i18n="extractVideoButton"></button>
+                <button class="primary-action" id="video-generate-button" type="button" data-i18n="generateFromVideoButton"></button>
+                <button class="secondary-action" id="video-cancel-button" type="button" data-i18n="cancelVideoJob"></button>
+              </div>
+              <div class="video-job-progress" id="video-job-progress" aria-live="polite" hidden>
+                <div class="video-job-progress-head">
+                  <span id="video-job-progress-label"></span>
+                </div>
+                <div class="video-job-progress-track">
+                  <div id="video-job-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="document-panel" aria-labelledby="document-tools-title">
-            <div class="tool-section-header">
-              <h3 id="document-tools-title" data-i18n="documentToolsTitle"></h3>
-              <p data-i18n="documentToolsDescription"></p>
+            <button class="tool-section-header" id="document-tools-toggle" type="button" aria-expanded="false" aria-controls="document-tools">
+              <span id="document-tools-title" data-i18n="documentToolsTitle"></span>
+              <span class="field-hint" data-i18n="toolsToggleHint"></span>
+            </button>
+            <div class="tool-section-body" id="document-tools">
+              <div class="file-picker">
+                <span class="field-label" data-i18n="documentFileLabel"></span>
+                <div class="file-picker-display">
+                  <input class="file-picker-input" id="document_file" name="document_file" type="file" />
+                  <label class="file-picker-action" for="document_file" data-i18n="chooseFile"></label>
+                  <span class="file-picker-name" id="document-file-name" data-i18n="noFileSelected"></span>
+                </div>
+              </div>
+              <div class="inline-actions">
+                <button class="secondary-action" id="document-button" type="button" data-i18n="uploadDocumentButton"></button>
+              </div>
+              <div class="document-list" id="document-list"></div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="max_sources" data-i18n="maxSourcesLabel"></label>
+              <input id="max_sources" name="max_sources" type="number" min="1" max="20" value="15" />
             </div>
             <div class="field">
-              <label for="document_file" data-i18n="documentFileLabel"></label>
-              <div class="file-picker">
-                <input class="file-picker-input" id="document_file" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" aria-describedby="document-file-name" />
-                <label class="file-picker-display" for="document_file">
-                  <span class="file-picker-action" data-i18n="chooseFile"></span>
-                  <span class="file-picker-name" id="document-file-name" data-i18n="noFileSelected"></span>
-                </label>
-              </div>
+              <label for="api_token" data-i18n="apiTokenLabel"></label>
+              <input id="api_token" name="api_token" type="password" autocomplete="off" />
             </div>
-            <button class="secondary-action" id="document-button" type="button" data-i18n="uploadDocumentButton"></button>
-            <div id="document-list" class="document-list" aria-live="polite"></div>
           </div>
-        </section>
 
-        <section class="panel result-panel">
-          <div class="panel-header">
-            <h2 data-i18n="resultTitle"></h2>
-            <p data-i18n="resultSubtitle"></p>
+          <select id="sample_case" name="sample_case"></select>
+        </form>
+
+        <div class="form-footer">
+          <button class="primary-action" type="submit" form="instruction-form">
+            <span data-i18n="generateButton"></span>
+          </button>
+          <span class="status" id="status" role="status" aria-live="polite" data-i18n="statusIdle"></span>
+        </div>
+      </section>
+
+      <section class="result-panel">
+        <div class="result-toolbar">
+          <h2 data-i18n="resultTitle"></h2>
+
+          <div class="route-stepper" data-i18n-aria-label="routeAria">
+            <span class="route-step is-done">
+              <span class="route-step-dot" aria-hidden="true"></span>
+              <span data-i18n="routeDraft"></span>
+            </span>
+            <span class="route-step-line" aria-hidden="true"></span>
+            <span class="route-step is-current">
+              <span class="route-step-dot" aria-hidden="true"></span>
+              <span data-i18n="routeReview"></span>
+            </span>
+            <span class="route-step-line" aria-hidden="true"></span>
+            <span class="route-step">
+              <span class="route-step-dot" aria-hidden="true"></span>
+              <span data-i18n="routeApproved"></span>
+            </span>
           </div>
-          <div class="result-toolbar">
-            <div class="result-actions">
-              <button class="export-action" id="improve-instruction" type="button" data-i18n="improveInstruction" disabled></button>
-              <button class="export-action" id="save-history" type="button" data-i18n="saveHistory" disabled></button>
-              <button class="export-action" id="export-markdown" type="button" data-i18n="exportMarkdown" disabled></button>
-              <button class="export-action" id="export-pdf" type="button" data-i18n="exportPdf" disabled></button>
-              <button class="export-action" id="export-json" type="button" data-i18n="exportJson" disabled></button>
-              <div id="status" class="status" role="status" aria-live="polite" data-i18n="statusIdle"></div>
-            </div>
+
+          <div class="result-actions">
+            <button class="secondary-action" id="improve-instruction" type="button">
+              <span data-i18n="improveInstruction"></span>
+            </button>
+            <button class="secondary-action" id="save-history" type="button">
+              <span data-i18n="saveHistory"></span>
+            </button>
+            <button class="export-action" id="export-markdown" type="button">
+              <span data-i18n="exportMarkdown"></span>
+            </button>
+            <button class="export-action" id="export-json" type="button">
+              <span data-i18n="exportJson"></span>
+            </button>
+            <button class="export-action" id="export-pdf" type="button">
+              <span data-i18n="exportPdf"></span>
+            </button>
           </div>
-          <div id="result" class="result-body" role="region" aria-labelledby="nav-instruction"></div>
-        </section>
-      </main>
-      </div>
+        </div>
+
+        <div class="result-body" id="result" role="region" aria-labelledby="nav-instruction"></div>
+      </section>
     </div>
+  </div>
 
-    <div id="auth-modal" class="modal-backdrop" hidden>
-      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        <form id="auth-form">
-          <h3 id="auth-modal-title" data-i18n="authTitle"></h3>
-          <div class="field">
-            <label for="auth_mode" data-i18n="authMode"></label>
-            <select id="auth_mode">
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+  <div class="modal-backdrop" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+    <div class="modal-panel auth-panel">
+      <h3 id="auth-modal-title" data-i18n="authTitle"></h3>
+      <form id="auth-form">
+        <div class="field">
+          <label for="auth_email" data-i18n="authEmail"></label>
+          <input id="auth_email" name="auth_email" type="email" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="auth_password" data-i18n="authPassword"></label>
+          <input id="auth_password" name="auth_password" type="password" autocomplete="current-password" />
+        </div>
+        <div class="field" data-auth-register-only>
+          <label for="auth_full_name" data-i18n="authFullName"></label>
+          <input id="auth_full_name" name="auth_full_name" type="text" />
+        </div>
+        <div class="field" data-auth-register-only>
+          <label for="auth_role" data-i18n="authRole"></label>
+          <select id="auth_role" name="auth_role" type="text" ></select>
+        </div>
+        <select id="auth_mode" name="auth_mode">
               <option value="login" data-i18n="authModeLogin"></option>
               <option value="register" data-i18n="authModeRegister"></option>
             </select>
-          </div>
-          <div class="field" data-auth-register-only>
-            <label for="auth_full_name" data-i18n="authFullName"></label>
-            <input id="auth_full_name" type="text" minlength="2" maxlength="120" autocomplete="name" />
-          </div>
-          <div class="field">
-            <label for="auth_email" data-i18n="authEmail"></label>
-            <input id="auth_email" type="email" required autocomplete="email" />
-          </div>
-          <div class="field">
-            <label for="auth_password" data-i18n="authPassword"></label>
-            <input id="auth_password" type="password" required minlength="8" maxlength="128" autocomplete="current-password" />
-          </div>
-          <div class="field" data-auth-register-only>
-            <label for="auth_role" data-i18n="authRole"></label>
-            <select id="auth_role"></select>
-          </div>
-          <div class="inline-actions">
-            <button class="primary-action" type="submit" data-i18n="authSubmit"></button>
-            <button class="secondary-action" id="auth-cancel" type="button" data-i18n="workflowCancel"></button>
-          </div>
-        </form>
-      </div>
+        <div class="modal-actions">
+          <button class="secondary-action" id="auth-cancel" type="button">
+            <span data-i18n="workflowCancel"></span>
+          </button>
+          <button class="primary-action" type="submit">
+            <span data-i18n="authSubmit"></span>
+          </button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <div id="workflow-modal" class="modal-backdrop" hidden>
-      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
-        <form id="workflow-form">
-          <h3 id="workflow-modal-title" data-i18n="workflowDecisionTitle"></h3>
-          <div class="field">
-            <label for="workflow_reviewer" data-i18n="historyReviewer"></label>
-            <input id="workflow_reviewer" type="text" required minlength="2" maxlength="120" />
-          </div>
-          <div class="field">
-            <label for="workflow_reviewer_role" data-i18n="workflowReviewerRole"></label>
-            <select id="workflow_reviewer_role" required></select>
-          </div>
-          <div class="field">
-            <label for="workflow_comment" data-i18n="historyComment"></label>
-            <textarea id="workflow_comment" required minlength="5" maxlength="1000"></textarea>
-          </div>
-          <div class="field">
-            <label for="workflow_resolved_blockers" data-i18n="workflowResolvedBlockers"></label>
-            <textarea id="workflow_resolved_blockers" data-i18n-placeholder="workflowResolvedBlockersPlaceholder"></textarea>
-          </div>
-          <div class="inline-actions">
-            <button class="primary-action" type="submit" data-i18n="workflowSubmit"></button>
-            <button class="secondary-action" id="workflow-cancel" type="button" data-i18n="workflowCancel"></button>
-          </div>
-        </form>
-      </div>
+  <div class="modal-backdrop" id="workflow-modal" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
+    <div class="modal-panel">
+      <h3 id="workflow-modal-title" data-i18n="workflowDecisionTitle"></h3>
+      <form id="workflow-form">
+        <div class="field">
+          <label for="workflow_reviewer" data-i18n="historyReviewer"></label>
+          <input id="workflow_reviewer" name="workflow_reviewer" type="text" />
+        </div>
+        <div class="field">
+          <label for="workflow_reviewer_role" data-i18n="workflowReviewerRole"></label>
+          <select id="workflow_reviewer_role" required></select>
+        </div>
+        <div class="field">
+          <label for="workflow_comment" data-i18n="historyComment"></label>
+          <textarea id="workflow_comment" name="workflow_comment" rows="3"></textarea>
+        </div>
+        <label class="checkbox-field" for="workflow_resolved_blockers">
+          <textarea id="workflow_resolved_blockers" data-i18n-placeholder="workflowResolvedBlockersPlaceholder"></textarea>
+          <span data-i18n="workflowResolvedBlockers"></span>
+        </label>
+        <div class="modal-actions">
+          <button class="secondary-action" id="workflow-cancel" type="button">
+            <span data-i18n="workflowCancel"></span>
+          </button>
+          <button class="primary-action" type="submit">
+            <span data-i18n="workflowSubmit"></span>
+          </button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <script src="/static/app.js" defer></script>
-  </body>
+</div>
+<script src="/static/app.js" defer></script>
+</body>
 </html>
