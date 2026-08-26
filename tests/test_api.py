@@ -774,7 +774,7 @@ def test_evaluate_instruction_endpoint(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["overall_score"] >= 0
-    assert len(payload["criteria"]) == 10
+    assert len(payload["criteria"]) == 11
     assert payload["risk_level"] in {"low", "medium", "high", "critical"}
     assert payload["expert_review_required"] is True
     assert payload["expert_review_notes"]

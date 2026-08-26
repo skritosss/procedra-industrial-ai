@@ -445,7 +445,22 @@ def _step(
         number=number,
         action=action,
         expected_result=expected_result,
-        safety_note=safety_note,
+        safety_note=_addressed_safety_note(safety_note),
         verification_method=verification_method,
         common_mistakes=common_mistakes,
     )
+
+
+_ESCALATION_ROLES = ("мастер", "технолог", "специалист", "ответственн", "руководител")
+
+
+def _addressed_safety_note(note: str) -> str:
+    """Make sure a safety note says who to turn to.
+
+    "Do not start work if the state is unclear" leaves the operator holding a
+    problem with nowhere to take it. Naming the escalation is what turns a
+    warning into an instruction.
+    """
+    if any(role in note.casefold() for role in _ESCALATION_ROLES):
+        return note
+    return f"{note.rstrip('. ')}. При отклонении остановить работу и сообщить мастеру смены."

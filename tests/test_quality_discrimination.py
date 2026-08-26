@@ -36,6 +36,7 @@ def test_every_mutation_declares_a_target_criterion() -> None:
         "source_grounding",
         "domain_risk_control",
         "implementation_readiness",
+        "executability",
     }
     assert harness.MUTATIONS
     for mutation in harness.MUTATIONS:

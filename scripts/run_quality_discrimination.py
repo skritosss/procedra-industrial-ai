@@ -438,6 +438,26 @@ def _generic_scope(instruction: WorkInstruction) -> WorkInstruction:
     return damaged
 
 
+def _numbers_without_units(instruction: WorkInstruction) -> WorkInstruction:
+    """Parameters that look precise and specify nothing."""
+    damaged = _copy(instruction)
+    values = ["затянуть до 45", "нагреть до 180", "выдержать 30", "давление 12"]
+    for index, step in enumerate(damaged.steps):
+        step.action = f"{step.action.rstrip('. ')}; {values[index % len(values)]}."
+    return damaged
+
+
+def _strip_escalation_roles(instruction: WorkInstruction) -> WorkInstruction:
+    """Warnings with nobody to report to."""
+    damaged = _copy(instruction)
+    for step in damaged.steps:
+        if step.safety_note:
+            step.safety_note = _strip_words(
+                step.safety_note, _ESCALATION_WORDS, replacement="участник работ"
+            )
+    return damaged
+
+
 MUTATIONS: tuple[MutationCase, ...] = (
     MutationCase(
         "placeholder_ppe",
@@ -654,6 +674,18 @@ MUTATIONS: tuple[MutationCase, ...] = (
         ("input_alignment", "request_focus"),
         "scope widened to anything",
         _generic_scope,
+    ),
+    MutationCase(
+        "numbers_without_units",
+        ("executability",),
+        "numeric parameters given without units",
+        _numbers_without_units,
+    ),
+    MutationCase(
+        "strip_escalation_roles",
+        ("executability",),
+        "safety notes name nobody to report to",
+        _strip_escalation_roles,
     ),
     MutationCase(
         "placeholder_control_points",

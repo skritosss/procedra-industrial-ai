@@ -26,6 +26,7 @@ CRITERION_LABELS = {
     "source_grounding": "Опора на источники",
     "domain_risk_control": "Контроль отраслевых рисков",
     "implementation_readiness": "Готовность к внедрению",
+    "executability": "Исполнимость на месте",
 }
 
 
@@ -69,8 +70,12 @@ CRITERION_WEIGHTS = {
     "input_alignment": 1.0,
     "implementation_readiness": 1.0,
     "training_value": 0.5,
+    "executability": 1.5,
 }
 SAFETY_CRITICAL_CRITERIA = ("safety", "domain_risk_control")
+# Structural completeness is not verification. Until a named reviewer has
+# validated at least one claim, the document cannot reach the top of the scale.
+UNVERIFIED_DRAFT_CEILING = 95
 SAFETY_FLOOR = 90
 
 _MIN_SUBSTANTIVE_CHARS = 4
@@ -149,8 +154,9 @@ def evaluate_instruction(
         _score_source_grounding(instruction, source_request, safety_findings),
         _score_domain_risk_control(instruction, source_request, safety_findings),
         _score_implementation_readiness(instruction),
+        _score_executability(instruction),
     ]
-    overall = _overall_score(criteria)
+    overall = _unverified_draft_ceiling(instruction, _overall_score(criteria))
     missing = _detect_missing_elements(instruction)
     recommendations = _build_recommendations(criteria, missing, safety_findings)
     risk_level = cast(RiskLevel, _risk_level(overall, criteria, missing, safety_findings))
@@ -200,6 +206,28 @@ def _overall_score(criteria: list[CriterionScore]) -> int:
     if weakest_safety < SAFETY_FLOOR:
         return round(min(average, weakest_safety))
     return round(average)
+
+
+def _unverified_draft_ceiling(instruction: WorkInstruction, score: int) -> int:
+    """Hold back the top of the scale until a person has confirmed something.
+
+    The product's own claim is that it produces a draft requiring expert review.
+    A draft that scores 100 contradicts that in the same document: the reader is
+    told the text is unverified and simultaneously shown a perfect mark. The
+    ceiling is not a penalty for a fault — nothing is wrong with the structure —
+    it is the difference between "complete" and "confirmed", which the number had
+    been quietly collapsing.
+
+    A single validated claim lifts it, because at that point a named reviewer has
+    taken responsibility for part of the content.
+    """
+    if any(claim.validation_record is not None for claim in instruction.evidence_claims):
+        return score
+    # Scaled, not clipped. Clipping at the ceiling made every draft score exactly
+    # the same number, which removed the only thing the score is for: telling one
+    # document from another. Scaling keeps the ordering and still puts the top of
+    # the scale out of reach until a person has confirmed something.
+    return round(score * UNVERIFIED_DRAFT_CEILING / 100)
 
 
 def _score_completeness(instruction: WorkInstruction) -> CriterionScore:
@@ -553,6 +581,117 @@ def _score_domain_risk_control(
         ),
     }
     return _criterion("domain_risk_control", checks, issue_labels)
+
+
+_ROLE_MARKERS = ("оператор", "мастер", "технолог", "специалист", "ответственн", "руководител", "наладчик")
+_VAGUE_REFERENCES = (
+    "согласно документации",
+    "по инструкции предприятия",
+    "в установленном порядке",
+    "по действующим нормам",
+    "в соответствии с регламентом",
+)
+_UNIT_MARKERS = (
+    "мм", "см", "м", "кг", "г", "н·м", "нм", "бар", "мпа", "па", "°c", "с", "сек",
+    "мин", "ч", "в", "а", "квт", "об/мин", "%", "л",
+)
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _score_executability(instruction: WorkInstruction) -> CriterionScore:
+    """Whether the document can be carried out at a workplace as written.
+
+    The other criteria ask whether the instruction is complete, safe and on
+    topic. None of them asks the question a foreman asks: can somebody pick this
+    up and do it. A document can be complete and still unusable — nobody named
+    to act, a value with no unit, a reference to "the relevant documentation"
+    that names nothing.
+    """
+    steps = instruction.steps
+    risky_steps = [step for step in steps if step.safety_note]
+    text = _instruction_text(instruction).lower()
+    checks = {
+        # Not every step: a work instruction is written for one performer and
+        # repeating the role in each line is bureaucratic noise. What matters is
+        # that a step which can go wrong says who to turn to.
+        "у рискованных шагов назван ответственный": (
+            _share(
+                _matches_any(f"{step.action} {step.safety_note or ''}", _ROLE_MARKERS)
+                for step in risky_steps
+            )
+            if risky_steps
+            else 1.0
+        ),
+        "у рискованных шагов есть способ проверки": (
+            _share(bool(step.verification_method) for step in risky_steps) if risky_steps else 1.0
+        ),
+        # A generator cannot know the plant's document numbers, and saying so is
+        # honest. What is not acceptable is saying it and leaving the reader to
+        # discover it: an unnamed reference has to be carried into the list of
+        # things to confirm locally.
+        "отсылки к документам названы или вынесены на локальную проверку": (
+            not any(marker in text for marker in _VAGUE_REFERENCES)
+            or _mentions_document_verification(instruction)
+        ),
+        "числовые значения снабжены единицами измерения": _numbers_carry_units(instruction),
+        "разделы не дублируют друг друга дословно": _distinct_share(
+            [*instruction.control_points, *instruction.quality_checklist]
+        )
+        >= 0.9,
+    }
+    issue_labels = {
+        "у рискованных шагов назван ответственный": (
+            "в шагах с риском не сказано, к кому обращаться при отклонении"
+        ),
+        "у рискованных шагов есть способ проверки": (
+            "у шагов с примечанием по безопасности нет способа проверки"
+        ),
+        "отсылки к документам названы или вынесены на локальную проверку": (
+            "есть отсылки к неназванным документам, не вынесенные на локальную проверку"
+        ),
+        "числовые значения снабжены единицами измерения": (
+            "часть числовых значений приведена без единиц измерения"
+        ),
+        "разделы не дублируют друг друга дословно": (
+            "контрольные точки и чеклист качества повторяют друг друга"
+        ),
+    }
+    return _criterion("executability", checks, issue_labels)
+
+
+def _mentions_document_verification(instruction: WorkInstruction) -> bool:
+    markers = ("документ", "регламент", "карт", "инструкц", "норматив")
+    return any(
+        any(marker in item.casefold() for marker in markers)
+        for item in instruction.local_verification_required
+    )
+
+
+def _numbers_carry_units(instruction: WorkInstruction) -> float:
+    """Share of numeric values followed by a unit.
+
+    A torque of "45" is not a specification. Step numbers and enumerations are
+    excluded by looking only at the sentence bodies where a parameter would sit.
+    """
+    fragments = [
+        *(step.action for step in instruction.steps),
+        *(step.expected_result for step in instruction.steps),
+        *(step.verification_method or "" for step in instruction.steps),
+        *instruction.control_points,
+        *instruction.quality_checklist,
+    ]
+    values = 0
+    with_units = 0
+    for fragment in fragments:
+        lowered = fragment.lower()
+        for match in _NUMBER.finditer(lowered):
+            values += 1
+            tail = lowered[match.end() : match.end() + 12].strip()
+            if any(tail.startswith(unit) for unit in _UNIT_MARKERS):
+                with_units += 1
+    if not values:
+        return 1.0
+    return with_units / values
 
 
 def _score_implementation_readiness(instruction: WorkInstruction) -> CriterionScore:

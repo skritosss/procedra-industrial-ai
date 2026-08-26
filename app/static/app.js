@@ -287,6 +287,7 @@ const translations = {
             source_grounding: "Опора на источники",
             domain_risk_control: "Контроль отраслевых рисков",
             implementation_readiness: "Готовность к внедрению",
+            executability: "Исполнимость на месте",
           },
           riskLabels: {
             low: "Низкий",
@@ -625,6 +626,7 @@ const translations = {
             source_grounding: "Source grounding",
             domain_risk_control: "Domain risk control",
             implementation_readiness: "Implementation readiness",
+            executability: "Executability on site",
           },
           riskLabels: {
             low: "Low",
