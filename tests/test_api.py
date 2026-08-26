@@ -26,6 +26,10 @@ def test_web_app_returns_language_switcher() -> None:
     assert style_response.status_code == 200
     assert script_response.headers["content-type"].startswith("text/javascript")
     assert style_response.headers["content-type"].startswith("text/css")
+    # Without revalidation a browser keeps a heuristically cached bundle after a
+    # deployment and runs the old front end against the new API.
+    assert response.headers["cache-control"] == "no-cache"
+    assert script_response.headers["cache-control"] == "no-cache"
     assert '<link rel="stylesheet" href="/static/app.css" />' in response.text
     assert '<script src="/static/app.js" defer></script>' in response.text
     assert "<style" not in response.text

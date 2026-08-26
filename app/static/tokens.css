@@ -133,10 +133,10 @@
   --hit: 44px;
   --control-h: 44px;
   --sidebar-w: 232px;
-  --form-col-min: 300px;
-  --form-col-max: 360px;
-  --form-col-min-tight: 288px;
-  --form-col-max-tight: 324px;
+  --form-col-min: 340px;
+  --form-col-max: 400px;
+  --form-col-min-tight: 320px;
+  --form-col-max-tight: 356px;
   --topbar-h: 56px;
   --hairline: 1px;
   --bar-h: 4px;

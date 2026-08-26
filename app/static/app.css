@@ -181,6 +181,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .sidebar-backdrop { display: none; }
 
+/* A long option should trail off, not stop mid-word. */
+.field select { text-overflow: ellipsis; }
+
 /* Page scroll stays locked while the drawer is open. */
 body.mobile-menu-open { overflow: hidden; }
 
@@ -384,6 +387,11 @@ input.error, select.error, textarea.error {
 .field.error .field-hint, .error-text { color: var(--sem-critical-text); }
 
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+
+/* One column inside the input panel. Paired fields there are ~150px wide, and
+   the longest select option needs 244px, so every industry profile and
+   instruction type was being cut off mid-word. */
+#instruction-form .grid-2 { grid-template-columns: minmax(0, 1fr); }
 
 .checkbox-field {
   display: flex;
@@ -917,8 +925,6 @@ input.error, select.error, textarea.error {
 @media print {
   .sidebar, .topbar, .result-toolbar, .form-footer, .panel-header, .modal-backdrop, .sidebar-backdrop { display: none; }
 
-/* Page scroll stays locked while the drawer is open. */
-body.mobile-menu-open { overflow: hidden; }
   .app-frame { display: block; }
   .layout { display: block; padding: 0; }
   .panel { display: none; }

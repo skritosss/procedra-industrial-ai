@@ -188,6 +188,13 @@ async def add_security_headers(request: Request, call_next):
     if request.url.path.startswith(("/api/auth/", "/api/admin/")):
         response.headers.setdefault("Cache-Control", "no-store")
         response.headers.setdefault("Pragma", "no-cache")
+    elif request.url.path == "/" or request.url.path.startswith("/static/"):
+        # The bundle has no content hash in its name, so a heuristically cached
+        # copy survives a deployment: the browser keeps running the previous
+        # front end against the new API until the file happens to expire.
+        # Revalidation costs one conditional request and removes that class of
+        # bug entirely.
+        response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
 

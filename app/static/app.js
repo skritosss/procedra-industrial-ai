@@ -988,7 +988,11 @@ const translations = {
           element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel));
         });
         document.querySelectorAll("[data-lang]").forEach((button) => {
-          button.setAttribute("aria-pressed", String(button.dataset.lang === language));
+          const isCurrent = button.dataset.lang === language;
+          button.setAttribute("aria-pressed", String(isCurrent));
+          // The stylesheet marks the current language with a class; without it
+          // the switch kept highlighting Russian after switching to English.
+          button.classList.toggle("is-active", isCurrent);
         });
         document.getElementById("task").placeholder = t("taskPlaceholder");
         document.getElementById("operation_name").placeholder = t("operationPlaceholder");
@@ -2137,6 +2141,27 @@ const translations = {
         exportJsonButton.disabled = disabled;
         saveHistoryButton.disabled = disabled;
         improveInstructionButton.disabled = disabled;
+        syncRouteStepper();
+      }
+
+      // Order of the approval route, used to mark what is behind and where the
+      // document stands now.
+      const ROUTE_SEQUENCE = ["ai_draft", "expert_review", "approved"];
+
+      function syncRouteStepper() {
+        const stepper = document.querySelector(".route-stepper");
+        if (!stepper) return;
+        const steps = Array.from(stepper.querySelectorAll(".route-step"));
+        // With no document there is no route: showing "in review" on an empty
+        // screen claims a status the product has not given anything yet.
+        stepper.hidden = !lastPayload;
+        if (!lastPayload) return;
+        const status = (lastPayload.instruction.workflow || {}).status;
+        const current = ROUTE_SEQUENCE.indexOf(status);
+        steps.forEach((step, index) => {
+          step.classList.toggle("is-done", current >= 0 && index < current);
+          step.classList.toggle("is-current", index === current);
+        });
       }
 
       function downloadTextFile(filename, content, mimeType) {
