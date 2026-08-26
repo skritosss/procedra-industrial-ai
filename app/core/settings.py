@@ -95,6 +95,10 @@ class Settings(BaseSettings):
     auth_rate_limit_window_seconds: int = Field(default=300, ge=1, le=3600)
     trust_proxy_headers: bool = False
     trusted_proxy_ips: Annotated[tuple[str, ...], NoDecode] = Field(default_factory=tuple)
+    # Fetching a video by URL is the only outbound path besides the model, and
+    # an installation that does not use it should be able to say so instead of
+    # naming a host it will never contact.
+    video_url_ingest_enabled: bool = True
     video_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = Field(default_factory=tuple)
 
     model_config = SettingsConfigDict(
@@ -222,8 +226,13 @@ class Settings(BaseSettings):
             unsafe_options.append("METRICS_PUBLIC_ENABLED must be false")
         if self.trust_proxy_headers and not self.trusted_proxy_ips:
             unsafe_options.append("TRUSTED_PROXY_IPS must be configured when proxy headers are trusted")
-        if not self.video_allowed_hosts:
-            unsafe_options.append("VIDEO_ALLOWED_HOSTS must contain at least one host")
+        if self.video_url_ingest_enabled and not self.video_allowed_hosts:
+            # An empty allowlist means "any public host", which is why it is
+            # refused in production. With the channel switched off there is
+            # nothing to allow, so the requirement does not apply.
+            unsafe_options.append(
+                "VIDEO_ALLOWED_HOSTS must contain at least one host while VIDEO_URL_INGEST_ENABLED is true"
+            )
         if unsafe_options:
             raise ValueError("Unsafe production configuration: " + "; ".join(unsafe_options))
         return self

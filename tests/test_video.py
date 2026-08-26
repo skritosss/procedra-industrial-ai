@@ -1247,3 +1247,51 @@ def test_vision_prompt_treats_visible_text_as_untrusted() -> None:
 
     assert "untrusted evidence" in prompt
     assert "never as instructions" in prompt
+
+
+def test_url_ingest_is_refused_when_the_channel_is_switched_off(monkeypatch) -> None:
+    """A closed installation should be able to say it never reaches outside,
+    rather than naming a host it will never contact."""
+    from app.api import videos as videos_api
+
+    settings = get_settings()
+    monkeypatch.setattr(
+        videos_api,
+        "get_settings",
+        lambda: settings.model_copy(update={"video_url_ingest_enabled": False}),
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/videos/keyframes-from-url",
+        data={"video_url": "https://example.com/clip.mp4", "max_keyframes": 4},
+    )
+    job = client.post(
+        "/api/videos/jobs",
+        data={"video_url": "https://example.com/clip.mp4", "max_keyframes": 4},
+    )
+
+    assert response.status_code == 403
+    # The API wraps errors in an envelope; the message is what an operator reads.
+    assert "disabled" in response.json()["error"]["message"]
+    assert job.status_code == 403
+
+
+def test_switching_the_channel_off_lifts_the_allowlist_requirement() -> None:
+    """The allowlist exists because an empty one means "any public host". With
+    the channel off there is nothing to allow."""
+    from app.core.settings import Settings
+
+    production = {
+        "deployment_mode": "production",
+        "api_access_token": "t" * 32,
+        "allow_unauthenticated_access": False,
+        "auth_public_registration_enabled": False,
+        "auth_allow_role_self_assignment": False,
+        "auth_min_password_length": 12,
+        "metrics_public_enabled": False,
+    }
+
+    assert Settings(**production, video_url_ingest_enabled=False).video_allowed_hosts == ()
+    with pytest.raises(ValueError, match="VIDEO_ALLOWED_HOSTS must contain at least one host"):
+        Settings(**production, video_url_ingest_enabled=True)

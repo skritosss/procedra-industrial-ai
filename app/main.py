@@ -377,6 +377,7 @@ def _readiness_details(*, deep: bool) -> dict[str, object]:
         "auth_rate_limit_requests": settings.auth_rate_limit_requests,
         "metrics_public_enabled": settings.metrics_public_enabled,
         "trust_proxy_headers": settings.trust_proxy_headers,
+        "video_url_ingest_enabled": settings.video_url_ingest_enabled,
         "video_allowed_hosts": list(settings.video_allowed_hosts),
         "capabilities": _capability_details(settings),
         "generated_dir_writable": generated_writable,
@@ -410,8 +411,10 @@ def _capability_details(settings: Settings) -> dict[str, dict[str, object]]:
             "mode": "local_catalog" if settings.public_sources_enabled else "disabled",
         },
         "video_url_ingest": {
-            "enabled": settings.deployment_mode == "demo" or bool(settings.video_allowed_hosts),
+            "enabled": settings.video_url_ingest_enabled
+            and (settings.deployment_mode == "demo" or bool(settings.video_allowed_hosts)),
             "host_allowlist_configured": bool(settings.video_allowed_hosts),
+            "switched_off": not settings.video_url_ingest_enabled,
         },
     }
 

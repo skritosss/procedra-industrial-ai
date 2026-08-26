@@ -83,6 +83,7 @@ def create_video_keyframes_from_url(
     visual_quality: str = Form("720"),
 ) -> VideoKeyframeResponse:
     settings = get_settings()
+    _require_url_ingest(settings)
     try:
         context = require_permission(request, "video:create", settings)
         if not video_url.strip():
@@ -126,6 +127,20 @@ def create_video_keyframes_from_url(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _require_url_ingest(settings) -> None:
+    """Refuse the URL path when the deployment has switched it off.
+
+    403 rather than 404: the endpoint exists and the caller is allowed to ask,
+    the installation has decided not to reach outside. Saying so plainly beats
+    a not-found that looks like a bug.
+    """
+    if not settings.video_url_ingest_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Video URL ingest is disabled in this deployment",
+        )
+
+
 def _validate_max_keyframes(max_keyframes: int) -> None:
     if max_keyframes < 1 or max_keyframes > 16:
         raise ValueError("max_keyframes must be between 1 and 16")
@@ -166,6 +181,8 @@ def enqueue_video_job(
     normalized_url = video_url.strip()
     if (file is None) == (not normalized_url):
         raise HTTPException(status_code=400, detail="Provide exactly one video file or video URL")
+    if normalized_url:
+        _require_url_ingest(settings)
 
     video_id: str | None = None
     video_path: Path | None = None
