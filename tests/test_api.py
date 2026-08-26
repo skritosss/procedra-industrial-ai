@@ -692,6 +692,7 @@ def test_generate_instruction_endpoint_returns_industrial_payload(monkeypatch) -
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -751,6 +752,7 @@ def test_evaluate_instruction_endpoint(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -791,6 +793,7 @@ def test_export_pdf_endpoint_returns_watermarked_pdf(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -827,6 +830,7 @@ def test_generate_with_context_returns_sources(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -877,6 +881,7 @@ def test_generate_from_video_returns_step_frame_links(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -1100,6 +1105,7 @@ def test_generate_from_video_compacts_long_video_context(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -1302,6 +1308,7 @@ def test_rebuild_instruction_refreshes_markdown_and_evaluation(monkeypatch) -> N
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -1335,6 +1342,7 @@ def test_improve_instruction_returns_valid_payload(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -1372,6 +1380,7 @@ def test_improve_instruction_handles_short_title_without_source_request(monkeypa
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )
@@ -1401,6 +1410,7 @@ def test_instruction_response_rejects_unbounded_sources(monkeypatch) -> None:
                 "openai_model": "test-model",
                 "openai_timeout_seconds": 1,
                 "llm_base_url": None,
+                "llm_allow_external_calls": True,
             },
         )(),
     )

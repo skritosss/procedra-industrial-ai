@@ -9,7 +9,8 @@ from pathlib import Path
 
 
 from app.core.settings import get_settings
-from app.providers.errors import ProviderError, ProviderNotConfiguredError
+from app.providers.errors import ProviderEgressBlockedError, ProviderError, ProviderNotConfiguredError
+from app.providers.perimeter import report_blocked
 from app.providers.registry import embedding_provider
 from app.retrieval.public_sources import retrieve_public_sources
 from app.schemas.instruction import ContextGenerationRequest, RetrievedSource
@@ -313,6 +314,10 @@ def _embedding_bundle(
                 {_chunk_key(chunk): embeddings[index + 1] for index, chunk in enumerate(chunks)},
                 "model",
             )
+        except ProviderEgressBlockedError as error:
+            # Caught ahead of ProviderError so the refusal is recorded rather
+            # than absorbed as an ordinary embedding failure.
+            report_blocked(error, "embedding")
         except (ProviderError, ValueError, IndexError, AttributeError):
             pass
     return (

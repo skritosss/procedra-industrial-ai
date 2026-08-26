@@ -358,6 +358,11 @@ def _readiness_details(*, deep: bool) -> dict[str, object]:
         "status": readiness_status,
         "deployment_mode": settings.deployment_mode,
         "openai_enabled": settings.openai_enabled,
+        # The first question a plant security team asks is where the text is
+        # processed. Answering it from the running service beats answering it
+        # from a document that may not match the deployment.
+        "llm_allow_external_calls": settings.llm_allow_external_calls,
+        "llm_endpoint_configured": bool(settings.llm_base_url),
         "public_sources_enabled": settings.public_sources_enabled,
         "max_public_sources": settings.public_sources_max_results,
         "document_max_bytes": settings.document_max_bytes,

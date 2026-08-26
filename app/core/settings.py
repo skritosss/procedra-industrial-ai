@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # OpenAI-compatible URL works here — a Russian hosted model, a self-hosted
     # vLLM or Ollama inside a plant perimeter, or a corporate LLM gateway.
     llm_base_url: str | None = None
+    # Closed-perimeter switch. False means every model call must stay inside the
+    # deployment's own network, enforced in the provider layer rather than by
+    # operator discipline.
+    llm_allow_external_calls: bool = True
     video_max_bytes: int = Field(default=250 * 1024 * 1024, ge=1 * 1024 * 1024, le=2 * 1024 * 1024 * 1024)
     video_max_duration_seconds: float = Field(default=1800.0, ge=10, le=7200)
     video_network_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
@@ -184,6 +188,21 @@ class Settings(BaseSettings):
             raise ValueError("AUTH_SESSION_IDLE_TIMEOUT_SECONDS must not exceed AUTH_SESSION_TTL_SECONDS")
         if self.video_job_heartbeat_seconds * 2 >= self.video_job_lease_seconds:
             raise ValueError("VIDEO_JOB_HEARTBEAT_SECONDS must be less than half VIDEO_JOB_LEASE_SECONDS")
+        if not self.llm_allow_external_calls and self.openai_enabled:
+            from app.providers.perimeter import endpoint_is_literal_public
+
+            if not self.llm_base_url:
+                raise ValueError(
+                    "LLM_BASE_URL must be set when LLM_ALLOW_EXTERNAL_CALLS is false: "
+                    "an empty value means the vendor's public endpoint"
+                )
+            if endpoint_is_literal_public(self.llm_base_url):
+                raise ValueError(
+                    "LLM_BASE_URL points at a public address while LLM_ALLOW_EXTERNAL_CALLS is false"
+                )
+            # A hostname is not judged here on purpose: DNS may be unavailable at
+            # startup, and refusing to boot would take the deterministic path
+            # down with it. The provider layer resolves and refuses per call.
         if self.deployment_mode != "production":
             return self
         unsafe_options = []

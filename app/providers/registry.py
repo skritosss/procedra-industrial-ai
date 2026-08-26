@@ -29,6 +29,7 @@ from __future__ import annotations
 from app.core.settings import Settings, get_settings
 from app.providers.base import EmbeddingProvider, TextProvider, VisionProvider
 from app.providers.errors import ProviderNotConfiguredError
+from app.providers.perimeter import ensure_endpoint_allowed
 
 EMBEDDING_DIMENSIONS = 1536
 
@@ -37,10 +38,21 @@ def _model_is_configured(settings: Settings) -> bool:
     return bool(settings.openai_enabled and settings.openai_api_key)
 
 
+def _check_perimeter(settings: Settings) -> None:
+    """Second line after the startup check.
+
+    Startup can only judge a literal address; a hostname is resolved here, once
+    per provider construction, so an endpoint that starts pointing outside is
+    refused even though the service booted.
+    """
+    ensure_endpoint_allowed(settings.llm_base_url, settings)
+
+
 def text_provider(settings: Settings | None = None) -> TextProvider | None:
     resolved = settings or get_settings()
     if not _model_is_configured(resolved):
         return None
+    _check_perimeter(resolved)
     from app.providers.openai_api import OpenAICompatibleTextProvider
 
     try:
@@ -58,6 +70,7 @@ def vision_provider(settings: Settings | None = None) -> VisionProvider | None:
     resolved = settings or get_settings()
     if not _model_is_configured(resolved):
         return None
+    _check_perimeter(resolved)
     from app.providers.openai_api import OpenAICompatibleVisionProvider
 
     try:
@@ -75,6 +88,7 @@ def embedding_provider(settings: Settings | None = None) -> EmbeddingProvider | 
     resolved = settings or get_settings()
     if not _model_is_configured(resolved):
         return None
+    _check_perimeter(resolved)
     from app.providers.openai_api import OpenAICompatibleEmbeddingProvider
 
     try:

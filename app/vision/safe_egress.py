@@ -16,6 +16,8 @@ import yt_dlp
 from yt_dlp.networking import Request, Response
 from yt_dlp.networking.exceptions import HTTPError, RequestError, TransportError
 
+from app.core.network import is_public_address
+
 
 Resolver = Callable[..., list[tuple[Any, ...]]]
 
@@ -94,7 +96,7 @@ class VideoEgressPolicy:
         else:
             parsed_addresses = {literal}
 
-        if any(not _is_public_address(address) for address in parsed_addresses):
+        if any(not is_public_address(address) for address in parsed_addresses):
             raise EgressPolicyError("URL must point only to public host IP addresses")
         return tuple(sorted(str(address) for address in parsed_addresses))
 
@@ -133,18 +135,6 @@ class VideoEgressPolicy:
 
 def _hostname_allowed(hostname: str, allowed_hosts: tuple[str, ...]) -> bool:
     return any(hostname == allowed or hostname.endswith(f".{allowed}") for allowed in allowed_hosts)
-
-
-def _is_public_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    return bool(
-        address.is_global
-        and not address.is_private
-        and not address.is_loopback
-        and not address.is_link_local
-        and not address.is_multicast
-        and not address.is_reserved
-        and not address.is_unspecified
-    )
 
 
 def _connect_to_resolved_target(

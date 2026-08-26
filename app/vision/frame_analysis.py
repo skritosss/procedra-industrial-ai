@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.core.settings import get_settings
 from app.providers.base import VisionProvider
-from app.providers.errors import ProviderError
+from app.providers.errors import ProviderEgressBlockedError, ProviderError
+from app.providers.perimeter import report_blocked
 from app.providers.registry import vision_provider
 from app.schemas.video import FrameAnalysis, Keyframe, VideoSegment
 
@@ -49,7 +50,11 @@ def analyze_keyframes(keyframes: list[Keyframe]) -> list[FrameAnalysis]:
     if not settings.openai_enabled or not settings.openai_api_key:
         return [_fallback_analysis(keyframe, "model_disabled") for keyframe in keyframes]
 
-    provider = vision_provider(settings)
+    try:
+        provider = vision_provider(settings)
+    except ProviderEgressBlockedError as error:
+        report_blocked(error, "vision")
+        provider = None
     if provider is None:
         return [_fallback_analysis(keyframe, "model_disabled") for keyframe in keyframes]
     analyses = []

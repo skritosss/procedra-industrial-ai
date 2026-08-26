@@ -6,7 +6,8 @@ from pydantic import ValidationError
 
 from app.core.settings import get_settings
 from app.providers.base import TextProvider
-from app.providers.errors import ProviderError
+from app.providers.errors import ProviderEgressBlockedError, ProviderError
+from app.providers.perimeter import report_blocked
 from app.providers.registry import text_provider
 from app.evaluation.quality import evaluate_instruction
 from app.evaluation.safety import enforce_provenance_and_safety, link_evidence_claims_to_sources
@@ -95,7 +96,13 @@ If information is missing, state what must be verified locally instead of preten
 
 def generate_instruction(request: InstructionRequest) -> InstructionResponse:
     settings = get_settings()
-    provider = text_provider(settings)
+    try:
+        provider = text_provider(settings)
+    except ProviderEgressBlockedError as error:
+        # A blocked call is a configuration fault, not a model outage: the draft
+        # is still produced deterministically, and the reason is recorded.
+        report_blocked(error, "text")
+        return _fallback_response(request)
     if provider is None:
         return _fallback_response(request)
 
