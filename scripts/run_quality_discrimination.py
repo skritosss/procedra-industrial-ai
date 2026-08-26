@@ -314,6 +314,130 @@ def _insert_guard_bypass(instruction: WorkInstruction) -> WorkInstruction:
     return damaged
 
 
+PLACEHOLDER = "не указано"
+
+
+def _placeholder_list(instruction: WorkInstruction, field: str) -> WorkInstruction:
+    """Keep the field populated but empty of meaning.
+
+    Schema validation only requires a non-empty list, so this is the damage a
+    generator actually produces: the section exists and says nothing.
+    """
+    damaged = _copy(instruction)
+    setattr(damaged, field, [PLACEHOLDER])
+    return damaged
+
+
+def _truncate_steps(instruction: WorkInstruction) -> WorkInstruction:
+    """Three steps instead of five: below what a procedure can describe."""
+    damaged = _copy(instruction)
+    damaged.steps = damaged.steps[:3]
+    for index, step in enumerate(damaged.steps, start=1):
+        step.number = index
+    return damaged
+
+
+def _strip_expected_results(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    for step in damaged.steps:
+        step.expected_result = PLACEHOLDER
+    return damaged
+
+
+def _terse_actions(instruction: WorkInstruction) -> WorkInstruction:
+    """Actions too short to act on, but still schema-valid sentences."""
+    damaged = _copy(instruction)
+    for step in damaged.steps:
+        step.action = "Выполнить шаг."
+    return damaged
+
+
+def _unrelated_control_points(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.control_points = [
+        "Проверить укомплектованность аптечки в бытовом помещении.",
+        "Сверить график отпусков на следующий квартал.",
+        "Уточнить расписание доставки канцелярии в офис.",
+        "Подтвердить наличие питьевой воды в комнате отдыха.",
+    ]
+    return damaged
+
+
+def _strip_workflow_roles(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.workflow.required_review_roles = damaged.workflow.required_review_roles[:1]
+    return damaged
+
+
+def _placeholder_approval_blockers(instruction: WorkInstruction) -> WorkInstruction:
+    """A blocker that blocks nothing.
+
+    The schema requires the list to be non-empty, so emptying it would test a
+    document production cannot produce. The realistic damage is a list that
+    exists and says nothing.
+    """
+    damaged = _copy(instruction)
+    damaged.workflow.approval_blockers = [PLACEHOLDER]
+    return damaged
+
+
+def _strip_next_actions(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.workflow.next_actions = damaged.workflow.next_actions[:1]
+    return damaged
+
+
+def _strip_expert_questions(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.expert_review_questions = []
+    return damaged
+
+
+def _strip_local_verification(instruction: WorkInstruction) -> WorkInstruction:
+    """Drop the list that says which values still need local confirmation.
+
+    This is the claim the product rests on: it does not pretend to be right, it
+    says what has to be checked. Removing it should cost the draft dearly.
+    """
+    damaged = _copy(instruction)
+    damaged.local_verification_required = []
+    return damaged
+
+
+def _strip_evidence_claims(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.evidence_claims = []
+    return damaged
+
+
+_FIXATION_WORDS = ("зафикс", "журнал", "запис", "расписк", "акт")
+_REVIEW_WORDS = ("провер", "ответствен", "технолог", "охране труда", "мастер")
+
+
+def _strip_result_fixation(instruction: WorkInstruction) -> WorkInstruction:
+    return _apply_to_text_fields(
+        instruction, lambda text: _strip_words(text, _FIXATION_WORDS, replacement="работа")
+    )
+
+
+def _strip_review_language(instruction: WorkInstruction) -> WorkInstruction:
+    return _apply_to_text_fields(
+        instruction, lambda text: _strip_words(text, _REVIEW_WORDS, replacement="работа")
+    )
+
+
+def _strip_operator_level(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.operator_level = PLACEHOLDER
+    return damaged
+
+
+def _generic_scope(instruction: WorkInstruction) -> WorkInstruction:
+    damaged = _copy(instruction)
+    damaged.scope = "Инструкция общего назначения."
+    return damaged
+
+
 MUTATIONS: tuple[MutationCase, ...] = (
     MutationCase(
         "placeholder_ppe",
@@ -416,6 +540,120 @@ MUTATIONS: tuple[MutationCase, ...] = (
         ("domain_risk_control",),
         "an interlock bypass wrapped in safety-sounding words",
         _insert_guard_bypass,
+    ),
+    MutationCase(
+        "placeholder_tools",
+        ("completeness",),
+        "tools and documents listed but empty of meaning",
+        lambda instruction: _placeholder_list(instruction, "required_tools"),
+    ),
+    MutationCase(
+        "placeholder_prerequisites",
+        ("completeness",),
+        "prerequisites present but empty of meaning",
+        lambda instruction: _placeholder_list(instruction, "prerequisites"),
+    ),
+    MutationCase(
+        "placeholder_safety_requirements",
+        ("completeness", "safety"),
+        "safety requirements present but empty of meaning",
+        lambda instruction: _placeholder_list(instruction, "safety_requirements"),
+    ),
+    MutationCase(
+        "placeholder_emergency_actions",
+        ("completeness", "safety", "implementation_readiness"),
+        "emergency actions present but empty of meaning",
+        lambda instruction: _placeholder_list(instruction, "emergency_actions"),
+    ),
+    MutationCase(
+        "placeholder_common_mistakes",
+        ("training_value",),
+        "common mistakes present but empty of meaning",
+        lambda instruction: _placeholder_list(instruction, "common_mistakes"),
+    ),
+    MutationCase(
+        "truncate_steps",
+        ("completeness",),
+        "three steps where a procedure needs more",
+        _truncate_steps,
+    ),
+    MutationCase(
+        "strip_expected_results",
+        ("training_value", "clarity"),
+        "steps state no expected result",
+        _strip_expected_results,
+    ),
+    MutationCase(
+        "terse_actions",
+        ("clarity",),
+        "actions too short to act on",
+        _terse_actions,
+    ),
+    MutationCase(
+        "unrelated_control_points",
+        ("logical_sequence",),
+        "control points belong to another process",
+        _unrelated_control_points,
+    ),
+    MutationCase(
+        "strip_workflow_roles",
+        ("implementation_readiness",),
+        "a single review role instead of a matrix",
+        _strip_workflow_roles,
+    ),
+    MutationCase(
+        "placeholder_approval_blockers",
+        ("implementation_readiness",),
+        "approval blockers listed but empty of meaning",
+        _placeholder_approval_blockers,
+    ),
+    MutationCase(
+        "strip_next_actions",
+        ("implementation_readiness",),
+        "no route from draft to use",
+        _strip_next_actions,
+    ),
+    MutationCase(
+        "strip_expert_questions",
+        ("implementation_readiness",),
+        "nothing left for an expert to answer",
+        _strip_expert_questions,
+    ),
+    MutationCase(
+        "strip_local_verification",
+        ("implementation_readiness", "source_grounding"),
+        "no values marked as needing local confirmation",
+        _strip_local_verification,
+    ),
+    MutationCase(
+        "strip_evidence_claims",
+        ("source_grounding",),
+        "claims carry no typed provenance",
+        _strip_evidence_claims,
+    ),
+    MutationCase(
+        "strip_result_fixation",
+        ("implementation_readiness",),
+        "nothing says the result or deviation is recorded",
+        _strip_result_fixation,
+    ),
+    MutationCase(
+        "strip_review_language",
+        ("implementation_readiness",),
+        "no named review before use",
+        _strip_review_language,
+    ),
+    MutationCase(
+        "strip_operator_level",
+        ("training_value",),
+        "the audience of the instruction is unstated",
+        _strip_operator_level,
+    ),
+    MutationCase(
+        "generic_scope",
+        ("input_alignment", "request_focus"),
+        "scope widened to anything",
+        _generic_scope,
     ),
     MutationCase(
         "placeholder_control_points",

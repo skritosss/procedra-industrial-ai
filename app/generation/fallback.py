@@ -34,11 +34,16 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
     equipment = request.equipment or "Оборудование не указано"
     instruction_type = TYPE_LABELS[request.instruction_type]
     operator_level = USER_LEVEL_LABELS[request.user_level]
+    # The scope named the scenario type but never the work that was asked for,
+    # so a reader could not tell one draft from another of the same type, and
+    # the alignment criterion had nothing of the request to match against.
     scope = (
-        f"Инструкция предназначена для сценария: {instruction_type}. "
+        f"Инструкция предназначена для операции: {operation}. "
+        f"Тип сценария: {instruction_type}. "
         f"Участок: {department}. Оборудование: {equipment}."
     )
     context_bullets = _context_bullets(request.technical_context)
+    steps = _steps_for_type(request, operation, equipment, context_bullets)
     observed_facts = _observed_facts(request, context_bullets, instruction_type)
     local_verification = _local_verification_items(request, context_bullets)
     expert_questions = _expert_questions(request, context_bullets)
@@ -75,6 +80,10 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
             "Проверить готовность рабочего места до начала операции.",
             "Убедиться, что защитные ограждения и аварийная остановка доступны и исправны.",
             "Не выполнять действия при неясном состоянии оборудования или отсутствии допуска.",
+            # Every declared hazard zone needs an instruction that addresses it.
+            # Pinching was listed and never mentioned again, which the safety
+            # criterion flagged on every generated draft.
+            "Не приближать руки, одежду и волосы к зоне возможного защемления до остановки рабочих органов.",
             context_note,
             *context_control_points[:1],
         ],
@@ -90,8 +99,9 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
             "Ответственный мастер или наставник определен до начала выполнения инструкции.",
             *context_prerequisites,
         ],
-        steps=_steps_for_type(request, operation, equipment, context_bullets),
+        steps=steps,
         control_points=[
+            *_control_points_from_steps(steps),
             "Цель операции подтверждена до начала работы.",
             "СИЗ и документация подготовлены.",
             "Опасная зона очищена от посторонних предметов.",
@@ -276,6 +286,23 @@ def _deduplicate(items: list[str]) -> list[str]:
         seen.add(key)
         result.append(item)
     return result
+
+
+def _control_points_from_steps(steps: list[InstructionStep]) -> list[str]:
+    """Turn the first steps into control points that name the work.
+
+    A control point that does not refer to any step cannot be used to check the
+    work: "PPE and documentation prepared" is true of every procedure ever
+    written. These name what this instruction actually asks for, which is what
+    makes the list checkable on the floor.
+    """
+    points: list[str] = []
+    for step in steps[:3]:
+        action = step.action.rstrip(". ")
+        if len(action) > 90:
+            action = action[:90].rsplit(" ", 1)[0]
+        points.append(f"Шаг {step.number} выполнен и подтвержден: {action}.")
+    return points
 
 
 def _steps_for_type(

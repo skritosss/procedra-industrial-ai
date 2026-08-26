@@ -264,12 +264,22 @@ def _score_input_alignment(
     source_request: InstructionRequest | None,
 ) -> CriterionScore:
     checks = {
-        "сохранена область применения": bool(instruction.scope),
+        # Not `bool(scope)`: the schema already requires a non-empty string, so
+        # that phrasing described a check that could not fail. The label claims
+        # the scope still belongs to this request, and that is what is measured.
+        "сохранена область применения": _is_substantive(instruction.scope),
         "сохранено название оборудования": True,
         "сохранен участок": True,
         "учтен технический контекст": True,
     }
     if source_request:
+        checks["сохранена область применения"] = _is_substantive(instruction.scope) and (
+            _keyword_overlap(source_request.task, instruction.scope) >= 0.2
+            or bool(
+                source_request.operation_name
+                and source_request.operation_name.lower() in instruction.scope.lower()
+            )
+        )
         checks["сохранено название оборудования"] = (
             not source_request.equipment
             or source_request.equipment.lower() in (instruction.equipment or "").lower()
@@ -390,15 +400,20 @@ _COMPLETION_MARKERS = ("зафиксировать", "передать", "зав
 
 
 def _score_logical_sequence(instruction: WorkInstruction) -> CriterionScore:
-    numbers = [step.number for step in instruction.steps]
+    # Sequential numbering is not checked here: the schema rejects a document
+    # whose steps are not numbered from 1 without gaps, so a criterion asking
+    # the same question could never fail. Keeping it inflated the count of
+    # checks without adding a single one that can catch anything.
     checks = {
-        "нумерация идет без пропусков": numbers == list(range(1, len(numbers) + 1)),
         "есть подготовительный шаг": bool(instruction.steps)
         and _matches_any(instruction.steps[0].action, _PREPARATION_MARKERS),
         "есть финальная проверка": bool(instruction.steps)
         and _matches_any(instruction.steps[-1].action, _COMPLETION_MARKERS),
         "подготовка идет раньше завершения": _preparation_precedes_completion(instruction),
-        "контрольные точки связаны с процессом": len(instruction.control_points) >= 3,
+        # Counting entries answered a different question, and completeness
+        # already asks it. Relatedness is whether a control point refers to the
+        # work the steps describe.
+        "контрольные точки связаны с процессом": _control_points_follow_steps(instruction),
     }
     issue_labels = {
         "нумерация идет без пропусков": "нумерация шагов нарушена",
@@ -438,11 +453,38 @@ def _preparation_precedes_completion(instruction: WorkInstruction) -> bool:
     return min(preparation) < max(completion)
 
 
+_RELATED_CONTROL_POINTS_EXPECTED = 3
+
+
+def _control_points_follow_steps(instruction: WorkInstruction) -> float:
+    """Share of control points that refer to what the steps actually do.
+
+    A list of four checks about the canteen rota is still four checks. Without
+    this the criterion accepted any list of the right length.
+    """
+    points = [point for point in instruction.control_points if _is_substantive(point)]
+    if not points:
+        return 0.0
+    step_text = " ".join(
+        [step.action for step in instruction.steps]
+        + [step.expected_result for step in instruction.steps]
+    )
+    related = sum(1 for point in points if _keyword_overlap(point, step_text) >= 0.25)
+    # A share of the whole list would be the wrong measure: general points like
+    # "PPE prepared" are legitimate and refer to no particular step. What must
+    # not happen is a list where nothing refers to this procedure at all.
+    return min(related, _RELATED_CONTROL_POINTS_EXPECTED) / _RELATED_CONTROL_POINTS_EXPECTED
+
+
 def _score_training_value(instruction: WorkInstruction) -> CriterionScore:
     checks = {
-        "указан уровень пользователя": bool(instruction.operator_level),
+        "указан уровень пользователя": _is_substantive(instruction.operator_level),
         "описаны типовые ошибки": len(instruction.common_mistakes) >= 3,
-        "у шагов есть ожидаемые результаты": all(step.expected_result for step in instruction.steps),
+        # The schema already requires a non-empty expected_result, so testing for
+        # presence tested nothing. "Выполнено" on every step is the real failure.
+        "у шагов есть ожидаемые результаты": _share(
+            _is_substantive(step.expected_result) for step in instruction.steps
+        ),
         "у шагов есть проверки": _share(bool(step.verification_method) for step in instruction.steps) >= 0.7,
         "есть чеклист качества": len(instruction.quality_checklist) >= 3,
     }
@@ -523,7 +565,9 @@ def _score_implementation_readiness(instruction: WorkInstruction) -> CriterionSc
         "есть вопросы для экспертной доработки": len(instruction.expert_review_questions) >= 3,
         "есть неподтвержденные параметры для проверки": bool(instruction.local_verification_required),
         "есть роли согласования": len(instruction.workflow.required_review_roles) >= 2,
-        "есть блокеры утверждения": bool(instruction.workflow.approval_blockers),
+        # Non-empty is guaranteed by the schema, so the question worth asking is
+        # whether a blocker says anything an approver could act on.
+        "есть блокеры утверждения": _is_substantive_list(instruction.workflow.approval_blockers),
         "есть следующие действия по внедрению": len(instruction.workflow.next_actions) >= 2,
     }
     return _criterion("implementation_readiness", checks)
