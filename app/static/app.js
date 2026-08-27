@@ -180,6 +180,7 @@ const translations = {
           generationMode: "Режим",
           generationModeLabels: { model: "Языковая модель", deterministic: "Детерминированный шаблон" },
           overallScore: "Балл структуры",
+          regulatoryBasis: "Обязательные разделы сверяются с приказом Минтруда России № 772н от 29.10.2021. Проверяется наличие раздела, а не его правильность.",
           verdict: "Вердикт",
           riskLevel: "Уровень риска",
           expertReview: "Экспертная проверка",
@@ -520,6 +521,7 @@ const translations = {
           generationMode: "Mode",
           generationModeLabels: { model: "Language model", deterministic: "Deterministic template" },
           overallScore: "Structure score",
+          regulatoryBasis: "Mandatory sections are checked against Order 772n of the Ministry of Labour of Russia (29.10.2021). Presence of a section is checked, not its correctness.",
           verdict: "Verdict",
           riskLevel: "Risk level",
           expertReview: "Expert review",
@@ -1814,6 +1816,7 @@ const translations = {
             </section>
             <section>
               <p class="doc-lede">${escapeHtml(evaluation.verdict)}</p>
+              <p class="criterion-note">${t("regulatoryBasis")}</p>
               <p class="criterion-note">${t("expertReview")}: ${
                 evaluation.expert_review_required ? t("expertReviewRequired") : t("expertReviewOptional")
               }</p>

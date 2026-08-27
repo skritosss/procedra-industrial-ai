@@ -16,6 +16,10 @@ from app.schemas.instruction import InstructionResponse, StepFrameLink
 
 SERVICE_NAME = "Procedra"
 DRAFT_NOTICE = "AI-черновик. Не заменяет утверждённую инструкцию предприятия."
+REGULATORY_BASIS = (
+    "Обязательные разделы сверяются с приказом Минтруда России № 772н от 29.10.2021. "
+    "Проверяется наличие раздела, а не его правильность."
+)
 CONTENT_WIDTH = 178 * mm
 STEP_NUMBER_WIDTH = 12 * mm
 SCORE_COLUMN_WIDTH = 34 * mm
@@ -499,6 +503,9 @@ def _evaluation_summary(payload, styles: dict[str, ParagraphStyle]) -> list:
     left: list = [
         Paragraph("Оценка структуры", styles["meta"]),
         Paragraph(_escape(evaluation.verdict), styles["body"]),
+        # The customer takes this document away; the basis of the mandatory-section
+        # check travels with it rather than staying on a screen they saw once.
+        Paragraph(REGULATORY_BASIS, styles["meta"]),
     ]
     header = Table(
         [[left, Paragraph(f"{evaluation.overall_score}", styles["score"])]],

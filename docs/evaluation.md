@@ -18,7 +18,29 @@ permit. The verdict text says "структура", never "качество", fo
 rubric were written together and share a template, so a high score on a generated
 draft partly reflects that shared origin. `make quality-discrimination` measures
 how much the criteria can actually distinguish, and reports how many checks never
-fail — currently a majority of them.
+change outcome — currently one of seventy-two.
+
+**One criterion is independent of us.** `regulatory_structure` checks the content
+that Order 772n of the Ministry of Labour of Russia (29.10.2021, "Об утверждении
+основных требований к порядку разработки и содержанию правил и инструкций по
+охране труда, разрабатываемых работодателем") requires an instruction to have.
+Each check names the paragraph it comes from, so a safety engineer can verify the
+mapping against the order rather than trust our wording. This is the only part of
+the score that does not depend on our own opinion of what a good instruction is.
+
+Its limit is stated plainly: the check looks for the observable trace of a
+requirement — the words in which first aid, hygiene or the end-of-work procedure
+would be described. It can establish that a subject is addressed somewhere in the
+document. It cannot establish that it is addressed correctly, and it is not a
+compliance certificate.
+
+Two further sources inform the structure rather than the scoring. ГОСТ 3.1105-2011
+(ЕСТД) requires a technological instruction to open with its scope and purpose and
+to be written in the order the work is performed; both are scored, as
+`input_alignment` and `logical_sequence`. The same standard requires document
+identification — designation, developer, reviewer, approver, date. Procedra carries
+those in the workflow and version history rather than in the instruction body, so
+they are not part of this score.
 
 ## How a criterion is scored
 

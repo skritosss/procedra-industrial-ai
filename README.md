@@ -71,6 +71,12 @@ Procedra explores a practical AI workflow for this problem:
   measures the shape of the document — required sections present, filled with something substantive,
   internally consistent. It does not assess whether the instruction is technically correct or safe
   for a given machine; a draft can be structurally complete and operationally wrong.
+- Mandatory sections are checked against Order 772n of the Ministry of Labour of Russia
+  (29.10.2021), which states what a workplace safety instruction has to contain. Each check names
+  the paragraph it comes from, so the mapping can be verified against the order rather than taken
+  on trust. The check establishes that a subject is addressed somewhere in the document, not that
+  it is addressed correctly, and it is not a compliance certificate. See
+  [docs/evaluation.md](docs/evaluation.md).
 - Request-focus and quality-improvement passes that keep the result tied to the exact user request.
 - Industry profiles and operation templates for manufacturing, safety, emergency response, utilities, transport, food production, information security, and other workplace scenarios.
 - Hybrid semantic/keyword retrieval over local and uploaded documents.
