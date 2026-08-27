@@ -55,6 +55,15 @@ returned with it, and printed on the exported PDF.
 | Приказ Минтруда России от 07.12.2020 № 866н | Производство отдельных видов пищевой продукции |
 | Приказ Минтруда России от 18.12.2020 № 928н | Медицинские организации |
 | Приказ Минтруда России от 11.12.2020 № 881н | Подразделения пожарной охраны |
+| Постановление Правительства РФ от 24.12.2021 № 2464 | Обучение по охране труда, инструктажи, стажировка — применяется всегда |
+| ГОСТ 3.1105-2011 (ЕСТД) | Вводная часть и технологическая последовательность изложения — применяется всегда |
+| ГОСТ 12.2.003-91 (ССБТ) | Производственное оборудование: органы управления, защитные устройства, аварийная остановка |
+| ГОСТ 12.3.002-2014 (ССБТ) | Производственные процессы: устранение и снижение опасных факторов |
+
+**ГОСТ 12.0.004-2015 намеренно не используется.** Он покрывает ровно эту область,
+но его применение в России приостановлено до 01.09.2026 в пользу постановления
+Правительства № 2464. Ссылка на приостановленный стандарт стоила бы больше
+доверия, чем стоит сама проверка.
 
 **Two levels of citation, and the difference is not hidden.** Requirements from
 Order 772n were read in the text of the order and carry their paragraph numbers.
@@ -64,13 +73,10 @@ report as «тематическое требование» rather than claiming
 number would be worse than omitting it: a reviewer who looked it up and found
 something else would be right to distrust the rest of the report.
 
-Two further sources inform the structure rather than the scoring. ГОСТ 3.1105-2011
-(ЕСТД) requires a technological instruction to open with its scope and purpose and
-to be written in the order the work is performed; both are scored, as
-`input_alignment` and `logical_sequence`. The same standard requires document
-identification — designation, developer, reviewer, approver, date. Procedra carries
-those in the workflow and version history rather than in the instruction body, so
-they are not part of this score.
+ГОСТ 3.1105-2011 also requires document identification — designation, developer,
+reviewer, approver, date. Procedra carries those in the workflow and version
+history rather than in the instruction body, so they are deliberately not part of
+this score.
 
 ## How a criterion is scored
 

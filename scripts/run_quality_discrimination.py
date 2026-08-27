@@ -553,14 +553,24 @@ def _add_startup_step(instruction: WorkInstruction) -> WorkInstruction:
     return damaged
 
 
-_REGULATORY_WORDS = (
-    "перв", "помощь", "аптечк", "медицинск", "гигиен", "режим работ", "перерыв",
-    "регламентированн", "по окончании", "передать смену", "заверш",
-    # Hazards, risks and the pre-work equipment check are mandatory content too
-    # (paragraphs 22 and 23); without them here three of the eight regulatory
-    # checks had no mutation that could reach them.
-    "опасн", "риск", "вредн", "фактор", "огражд", "защитн", "исправн", "блокиров",
-)
+def _registry_markers(profile_scoped: bool) -> tuple[str, ...]:
+    """Words to erase, taken from the registry rather than copied beside it.
+
+    The first version of this list was written by hand and immediately went
+    stale: three requirements added minutes later had no mutation that could
+    reach them. Deriving it means a requirement is attacked the moment it is
+    declared.
+    """
+    return tuple(
+        sorted(
+            {
+                marker
+                for item in regulatory.REQUIREMENTS
+                if bool(item.profiles) is profile_scoped
+                for marker in item.markers
+            }
+        )
+    )
 
 
 def _strip_regulatory_sections(instruction: WorkInstruction) -> WorkInstruction:
@@ -571,7 +581,8 @@ def _strip_regulatory_sections(instruction: WorkInstruction) -> WorkInstruction:
     tests that.
     """
     return _apply_to_text_fields(
-        instruction, lambda text: _strip_words(text, _REGULATORY_WORDS, replacement="работа")
+        instruction,
+        lambda text: _strip_words(text, _registry_markers(profile_scoped=False), replacement="работа"),
     )
 
 
@@ -582,11 +593,9 @@ def _strip_industry_requirements(instruction: WorkInstruction) -> WorkInstructio
     attacked here without anyone remembering to update this list — the drift
     that left the profile checks unreachable in the first place.
     """
-    markers = tuple(
-        sorted({marker for item in regulatory.REQUIREMENTS if item.profiles for marker in item.markers})
-    )
     return _apply_to_text_fields(
-        instruction, lambda text: _strip_words(text, markers, replacement="работа")
+        instruction,
+        lambda text: _strip_words(text, _registry_markers(profile_scoped=True), replacement="работа"),
     )
 
 

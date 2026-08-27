@@ -92,6 +92,26 @@ SOURCES: dict[str, RegulatorySource] = {
         "Приказ Минтруда России от 11.12.2020 № 881н",
         "Правила по охране труда в подразделениях пожарной охраны",
     ),
+    "gost_3_1105": RegulatorySource(
+        "gost_3_1105",
+        "ГОСТ 3.1105-2011 (ЕСТД)",
+        "Формы и правила оформления документов общего назначения",
+    ),
+    "gost_12_2_003": RegulatorySource(
+        "gost_12_2_003",
+        "ГОСТ 12.2.003-91 (ССБТ)",
+        "Оборудование производственное. Общие требования безопасности",
+    ),
+    "gost_12_3_002": RegulatorySource(
+        "gost_12_3_002",
+        "ГОСТ 12.3.002-2014 (ССБТ)",
+        "Процессы производственные. Общие требования безопасности",
+    ),
+    "pp_2464": RegulatorySource(
+        "pp_2464",
+        "Постановление Правительства РФ от 24.12.2021 № 2464",
+        "Порядок обучения по охране труда и проверки знания требований охраны труда",
+    ),
 }
 
 
@@ -217,7 +237,51 @@ _BY_PROFILE: tuple[RegulatoryRequirement, ...] = (
     ),
 )
 
-REQUIREMENTS: tuple[RegulatoryRequirement, ...] = _GENERAL + _BY_PROFILE
+# Standards and the training rules. The two ЕСТД requirements carry paragraph
+# numbers because they were read in the text of the standard; the rest are
+# subject-level.
+#
+# ГОСТ 12.0.004-2015 is deliberately absent. It covers exactly this ground, but
+# its application in Russia is suspended until 01.09.2026 in favour of Government
+# Decree 2464, and citing a suspended standard to a safety engineer would cost
+# more credibility than the extra check is worth.
+_STANDARDS: tuple[RegulatoryRequirement, ...] = (
+    RegulatoryRequirement(
+        "gost_3_1105",
+        "есть вводная часть с областью распространения и назначением",
+        "не указаны область распространения и назначение документа",
+        ("предназначена", "область применения", "распростран", "назначени"),
+        paragraph="п. 6.4.2",
+    ),
+    RegulatoryRequirement(
+        "gost_3_1105",
+        "описание выполнено в технологической последовательности",
+        "описание не выстроено в технологической последовательности",
+        ("последовательн", "шаг", "этап", "порядок выполнения"),
+        paragraph="п. 6.4.1",
+    ),
+    RegulatoryRequirement(
+        "gost_12_2_003",
+        "учтены органы управления, защитные устройства и аварийная остановка",
+        "не учтены органы управления, защитные устройства или аварийная остановка",
+        ("орган управления", "органов управления", "аварийн", "защитн", "блокиров"),
+    ),
+    RegulatoryRequirement(
+        "gost_12_3_002",
+        "названы меры устранения или снижения опасных производственных факторов",
+        "не названы меры устранения или снижения опасных производственных факторов",
+        ("устран", "исключ", "снизить", "не допускать", "предотврат"),
+    ),
+    RegulatoryRequirement(
+        "pp_2464",
+        "учтены инструктаж, стажировка или допуск к работе",
+        "не учтены инструктаж, стажировка или допуск к работе",
+        ("инструктаж", "стажировк", "допуск", "обучен", "проверка знаний"),
+    ),
+)
+
+
+REQUIREMENTS: tuple[RegulatoryRequirement, ...] = _GENERAL + _STANDARDS + _BY_PROFILE
 
 
 def requirements_for(profile: str) -> tuple[RegulatoryRequirement, ...]:
