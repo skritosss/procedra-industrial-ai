@@ -8,20 +8,35 @@ def _baseline():
 
 
 def test_mutations_keep_the_instruction_schema_valid() -> None:
-    _, instruction, _ = _baseline()
+    _, instruction, request = _baseline()
     for mutation in harness.MUTATIONS:
-        damaged = mutation.apply(instruction)
+        damaged, altered = mutation.damage(instruction, request)
         # A mutation that breaks the schema would be rejected before evaluation
         # in production, so it would not test anything the evaluator can meet.
         assert WorkInstruction.model_validate(damaged.model_dump()), mutation.name
+        assert type(request).model_validate(altered.model_dump()), mutation.name
 
 
-def test_mutations_do_not_alter_the_original_instruction() -> None:
-    _, instruction, _ = _baseline()
+def test_mutations_do_not_alter_the_original_inputs() -> None:
+    _, instruction, request = _baseline()
     before = instruction.model_dump()
+    before_request = request.model_dump()
     for mutation in harness.MUTATIONS:
-        mutation.apply(instruction)
+        mutation.damage(instruction, request)
     assert instruction.model_dump() == before
+    assert request.model_dump() == before_request
+
+
+def test_every_mutation_changes_something() -> None:
+    """A case that damages neither input would be counted as a passing check."""
+    _, instruction, request = _baseline()
+    for mutation in harness.MUTATIONS:
+        assert mutation.apply or mutation.apply_to_request, mutation.name
+        damaged, altered = mutation.damage(instruction, request)
+        assert (
+            damaged.model_dump() != instruction.model_dump()
+            or altered.model_dump() != request.model_dump()
+        ), mutation.name
 
 
 def test_every_mutation_declares_a_target_criterion() -> None:

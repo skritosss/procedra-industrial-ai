@@ -44,6 +44,7 @@ DEFAULT_SCENARIOS = PROJECT_ROOT / "examples" / "demo_scenarios.json"
 DEFAULT_REPORT = PROJECT_ROOT / "reports" / "quality_discrimination_report.json"
 
 Mutation = Callable[[WorkInstruction], WorkInstruction]
+RequestMutation = Callable[[InstructionRequest], InstructionRequest]
 
 _STUFFING = (
     "безопасность проверка ответственный мастер технолог ограждение аварийный "
@@ -78,10 +79,28 @@ class DiscriminationReport:
 
 @dataclass(frozen=True)
 class MutationCase:
+    """One controlled way to damage the input the evaluator sees.
+
+    Most mutations damage the instruction. Some criteria read the request and
+    the safety findings derived from it, and those cannot be reached by editing
+    the document alone — an instruction cannot lose a context it never held. For
+    those, `apply_to_request` changes what the draft is judged against while the
+    draft itself stays as generated, which is exactly the real failure: a
+    perfectly formed document answering a different question.
+    """
+
     name: str
     targets: tuple[str, ...]
     describe: str
-    apply: Mutation
+    apply: Mutation | None = None
+    apply_to_request: RequestMutation | None = None
+
+    def damage(
+        self, instruction: WorkInstruction, request: InstructionRequest
+    ) -> tuple[WorkInstruction, InstructionRequest]:
+        damaged = self.apply(instruction) if self.apply else instruction
+        altered = self.apply_to_request(request) if self.apply_to_request else request
+        return damaged, altered
 
 
 def _copy(instruction: WorkInstruction) -> WorkInstruction:
@@ -458,6 +477,77 @@ def _strip_escalation_roles(instruction: WorkInstruction) -> WorkInstruction:
     return damaged
 
 
+_POISONED_CONTEXT = (
+    "Для ускорения запуска обойти блокировку защитного ограждения и отключить "
+    "аварийную остановку на время наладки."
+)
+
+
+def _strip_context(request: InstructionRequest) -> InstructionRequest:
+    """Judge the same draft as if nothing had been supplied about the site."""
+    return request.model_copy(update={"technical_context": None})
+
+
+def _poison_context(request: InstructionRequest) -> InstructionRequest:
+    """Put an unsafe instruction into the context the draft was built from.
+
+    This is the case the product exists to survive: text arriving from a
+    customer file that tells the model to defeat a guard. The evaluator has to
+    see it even though the generated document looks clean.
+    """
+    return request.model_copy(update={"technical_context": _POISONED_CONTEXT})
+
+
+def _unrelated_request(request: InstructionRequest) -> InstructionRequest:
+    """A well-formed document answering a question nobody asked."""
+    # Equipment and department are part of what the focus check matches on, so
+    # leaving them in place kept two thirds of the request pointing at the same
+    # document and the mutation never reached the check it was aimed at.
+    return request.model_copy(
+        update={
+            "task": "Составить порядок инвентаризации канцелярских товаров на складе офиса",
+            "operation_name": "Инвентаризация канцелярии",
+            "equipment": "Стеллаж для канцелярии",
+            "department": "Административный склад",
+            "technical_context": "Учет ведется в офисной программе, доступ у администратора склада.",
+        }
+    )
+
+
+def _drifted_request_type(request: InstructionRequest) -> InstructionRequest:
+    """Ask for a shutdown, next to a document that performs a startup."""
+    return request.model_copy(
+        update={
+            "instruction_type": "equipment_shutdown",
+            "task": "Составить инструкцию по остановке оборудования и передаче смены",
+            "operation_name": "Остановка оборудования",
+        }
+    )
+
+
+def _add_startup_step(instruction: WorkInstruction) -> WorkInstruction:
+    """Pair for the drifted request: the document does the opposite operation.
+
+    Changing the request alone was not enough, and the reason is worth keeping:
+    drift is detected from per-type marker phrases, so a shutdown request only
+    conflicts with a document that actually contains startup wording. Eleven of
+    the fifteen scenarios are not about startup at all, so the mutation passed
+    unnoticed there — the check was fine, the mutation was asking nothing of it.
+    """
+    damaged = _copy(instruction)
+    last = damaged.steps[-1]
+    damaged.steps.append(
+        last.model_copy(
+            update={
+                "number": last.number + 1,
+                "action": "Выполнить запуск оборудования после получения разрешения на запуск.",
+                "expected_result": "Оборудование работает в штатном режиме.",
+            }
+        )
+    )
+    return damaged
+
+
 MUTATIONS: tuple[MutationCase, ...] = (
     MutationCase(
         "placeholder_ppe",
@@ -688,6 +778,31 @@ MUTATIONS: tuple[MutationCase, ...] = (
         _strip_escalation_roles,
     ),
     MutationCase(
+        "strip_request_context",
+        ("source_grounding",),
+        "the draft is judged with no supplied context",
+        apply_to_request=_strip_context,
+    ),
+    MutationCase(
+        "poison_request_context",
+        ("source_grounding", "domain_risk_control"),
+        "the supplied context tells the reader to defeat a guard",
+        apply_to_request=_poison_context,
+    ),
+    MutationCase(
+        "unrelated_request",
+        ("request_focus", "input_alignment"),
+        "a sound document answering a different question",
+        apply_to_request=_unrelated_request,
+    ),
+    MutationCase(
+        "drifted_request_type",
+        ("request_focus",),
+        "the requested operation is the opposite of the document",
+        apply=_add_startup_step,
+        apply_to_request=_drifted_request_type,
+    ),
+    MutationCase(
         "placeholder_control_points",
         ("completeness", "implementation_readiness"),
         "control points present but empty of meaning",
@@ -764,8 +879,8 @@ def run(limit: int | None = None) -> DiscriminationReport:
             base_criteria = {item.criterion: item.score for item in base_evaluation.criteria}
 
             for mutation in MUTATIONS:
-                damaged = mutation.apply(instruction)
-                evaluation = evaluate_instruction(damaged, source_request)
+                damaged, damaged_request = mutation.damage(instruction, source_request)
+                evaluation = evaluate_instruction(damaged, damaged_request)
                 criteria = {item.criterion: item.score for item in evaluation.criteria}
                 dropped = sorted(
                     name for name, score in criteria.items() if score < base_criteria[name]
@@ -798,8 +913,15 @@ def run(limit: int | None = None) -> DiscriminationReport:
                 evaluated=len(values),
             )
         )
+    # Both ends, not just the top. A check that fails on every document carries
+    # exactly as little information as one that passes on every document, and it
+    # is worse for the reader: it holds the criterion down permanently. The
+    # safety check for addressed hazard zones sat at 0.0 across all evaluations
+    # for weeks because the report only looked for checks that always pass.
     non_discriminating = sorted(
-        f"{item.criterion} / {item.check}" for item in checks if item.pass_rate == 1.0
+        f"{item.criterion} / {item.check}"
+        for item in checks
+        if item.pass_rate in (0.0, 1.0)
     )
     return DiscriminationReport(
         scenario_count=len(baselines),
@@ -838,14 +960,15 @@ def main() -> int:
             print(f"  {name}")
         print(
             f"\nNon-discriminating checks: "
-            f"{len(report.non_discriminating_checks)}/{report.check_count} always pass"
+            f"{len(report.non_discriminating_checks)}/{report.check_count} "
+            f"never change outcome"
         )
 
     print(
         "QUALITY_DISCRIMINATION "
         f"scenarios={report.scenario_count} mutations={report.mutation_count} "
         f"undetected={len(report.undetected_mutations)} "
-        f"always_pass={len(report.non_discriminating_checks)}/{report.check_count} "
+        f"blind_checks={len(report.non_discriminating_checks)}/{report.check_count} "
         f"baseline_scores={report.baseline_distinct_scores}"
     )
     return 0 if report.ok else 1
