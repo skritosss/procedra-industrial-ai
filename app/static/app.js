@@ -288,6 +288,7 @@ const translations = {
             domain_risk_control: "Контроль отраслевых рисков",
             implementation_readiness: "Готовность к внедрению",
             executability: "Исполнимость на месте",
+            regulatory_structure: "Соответствие обязательной структуре",
           },
           riskLabels: {
             low: "Низкий",
@@ -627,6 +628,7 @@ const translations = {
             domain_risk_control: "Domain risk control",
             implementation_readiness: "Implementation readiness",
             executability: "Executability on site",
+            regulatory_structure: "Mandatory structure compliance",
           },
           riskLabels: {
             low: "Low",

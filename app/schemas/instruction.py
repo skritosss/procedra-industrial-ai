@@ -43,6 +43,7 @@ EvaluationCriterion = Literal[
     "domain_risk_control",
     "implementation_readiness",
     "executability",
+    "regulatory_structure",
 ]
 InstructionLifecycleStatus = Literal["ai_draft", "expert_review", "approved", "rejected"]
 RiskLevel = Literal["low", "medium", "high", "critical"]

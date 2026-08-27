@@ -548,6 +548,28 @@ def _add_startup_step(instruction: WorkInstruction) -> WorkInstruction:
     return damaged
 
 
+_REGULATORY_WORDS = (
+    "перв", "помощь", "аптечк", "медицинск", "гигиен", "режим работ", "перерыв",
+    "регламентированн", "по окончании", "передать смену", "заверш",
+    # Hazards, risks and the pre-work equipment check are mandatory content too
+    # (paragraphs 22 and 23); without them here three of the eight regulatory
+    # checks had no mutation that could reach them.
+    "опасн", "риск", "вредн", "фактор", "огражд", "защитн", "исправн", "блокиров",
+)
+
+
+def _strip_regulatory_sections(instruction: WorkInstruction) -> WorkInstruction:
+    """Remove the traces of the sections Order 772n makes mandatory.
+
+    A draft can be complete, safe and well aimed and still be unusable because
+    it omits first aid or the end-of-work procedure. Nothing else in the harness
+    tests that.
+    """
+    return _apply_to_text_fields(
+        instruction, lambda text: _strip_words(text, _REGULATORY_WORDS, replacement="работа")
+    )
+
+
 MUTATIONS: tuple[MutationCase, ...] = (
     MutationCase(
         "placeholder_ppe",
@@ -801,6 +823,12 @@ MUTATIONS: tuple[MutationCase, ...] = (
         "the requested operation is the opposite of the document",
         apply=_add_startup_step,
         apply_to_request=_drifted_request_type,
+    ),
+    MutationCase(
+        "strip_regulatory_sections",
+        ("regulatory_structure",),
+        "mandatory sections of Order 772n left without any trace",
+        _strip_regulatory_sections,
     ),
     MutationCase(
         "placeholder_control_points",

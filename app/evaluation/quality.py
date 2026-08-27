@@ -27,6 +27,7 @@ CRITERION_LABELS = {
     "domain_risk_control": "Контроль отраслевых рисков",
     "implementation_readiness": "Готовность к внедрению",
     "executability": "Исполнимость на месте",
+    "regulatory_structure": "Соответствие обязательной структуре",
 }
 
 
@@ -71,6 +72,7 @@ CRITERION_WEIGHTS = {
     "implementation_readiness": 1.0,
     "training_value": 0.5,
     "executability": 1.5,
+    "regulatory_structure": 2.0,
 }
 SAFETY_CRITICAL_CRITERIA = ("safety", "domain_risk_control")
 # Structural completeness is not verification. Until a named reviewer has
@@ -155,6 +157,7 @@ def evaluate_instruction(
         _score_domain_risk_control(instruction, source_request, safety_findings),
         _score_implementation_readiness(instruction),
         _score_executability(instruction),
+        _score_regulatory_structure(instruction),
     ]
     overall = _unverified_draft_ceiling(instruction, _overall_score(criteria))
     missing = _detect_missing_elements(instruction)
@@ -596,6 +599,75 @@ _UNIT_MARKERS = (
     "мин", "ч", "в", "а", "квт", "об/мин", "%", "л",
 )
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+# Order 772n of the Ministry of Labour (29.10.2021) lists what a workplace
+# instruction has to contain. These markers are the observable trace of each
+# requirement; the paragraph is named so a reviewer can check the mapping rather
+# than take it on trust.
+_REGULATORY_ELEMENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "указан порядок оказания первой помощи (п. 25)",
+        "не указан порядок оказания первой помощи пострадавшим",
+        ("перв", "помощь пострадав", "аптечк", "медицинск"),
+    ),
+    (
+        "указан порядок извещения о травме или неисправности (п. 22, 25)",
+        "не указан порядок извещения о травме или неисправности",
+        ("сообщить", "извест", "уведом", "доложить"),
+    ),
+    (
+        "описаны действия по окончании работы (п. 26)",
+        "не описаны действия по окончании работы",
+        ("по окончании", "передать смену", "передача смены", "заверш"),
+    ),
+    (
+        "указаны требования личной гигиены (п. 22, 26)",
+        "не указаны требования личной гигиены",
+        ("гигиен", "вымыть руки", "снять спецодежду", "санитарн"),
+    ),
+    (
+        "указан режим работы и перерывов (п. 22)",
+        "не указан режим работы и перерывов",
+        ("режим работ", "перерыв", "время отдыха", "регламентированн"),
+    ),
+    (
+        "названы опасные факторы и профессиональные риски (п. 22)",
+        "не названы опасные факторы и профессиональные риски",
+        ("опасн", "риск", "вредн", "фактор"),
+    ),
+    (
+        "описана проверка оборудования и защитных устройств до работы (п. 23)",
+        "не описана проверка оборудования и защитных устройств до работы",
+        ("огражд", "защитн", "исправн", "блокиров"),
+    ),
+    (
+        "описан порядок остановки и уборки рабочего места (п. 26)",
+        "не описан порядок остановки и уборки рабочего места",
+        ("отключ", "останов", "убрать", "очист", "отход"),
+    ),
+)
+
+
+def _score_regulatory_structure(instruction: WorkInstruction) -> CriterionScore:
+    """Coverage of what Order 772n requires an instruction to contain.
+
+    Every other criterion in this file measures a property we chose. This one
+    measures a requirement that exists whether we agree with it or not, which is
+    what makes it the only criterion a customer's safety engineer can verify
+    against a document they already have. A draft that scores well everywhere
+    else and omits first aid is not a good draft — it is one that cannot be put
+    into use.
+
+    Marker words are a proxy for the requirement, not proof of it: the criterion
+    can confirm the subject is addressed somewhere, not that it is addressed
+    correctly. That limit belongs in the published method, not in a footnote.
+    """
+    text = _instruction_text(instruction).lower()
+    checks = {label: any(marker in text for marker in markers)
+              for label, _, markers in _REGULATORY_ELEMENTS}
+    issue_labels = {label: issue for label, issue, _ in _REGULATORY_ELEMENTS}
+    return _criterion("regulatory_structure", checks, issue_labels)
 
 
 def _score_executability(instruction: WorkInstruction) -> CriterionScore:

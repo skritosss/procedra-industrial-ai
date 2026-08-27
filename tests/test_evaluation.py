@@ -18,7 +18,7 @@ def test_evaluate_fallback_instruction_returns_scores() -> None:
     evaluation = evaluate_instruction(instruction, request)
 
     assert evaluation.overall_score >= 75
-    assert len(evaluation.criteria) == 11
+    assert len(evaluation.criteria) == 12
     assert evaluation.verdict
     assert evaluation.recommendations
     assert evaluation.risk_level in {"low", "medium", "high", "critical"}

@@ -84,6 +84,13 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
             # Pinching was listed and never mentioned again, which the safety
             # criterion flagged on every generated draft.
             "Не приближать руки, одежду и волосы к зоне возможного защемления до остановки рабочих органов.",
+            # Paragraphs 22 and 26 of Order 772n: hygiene and the working-time
+            # regime are mandatory content. The regime itself is set by a local
+            # act, so it is named as a requirement and carried into the list of
+            # things to confirm locally rather than invented here.
+            "Соблюдать правила личной гигиены: не принимать пищу на рабочем месте, "
+            "вымыть руки и при необходимости сменить спецодежду после окончания работы.",
+            "Соблюдать установленный на участке режим работы и регламентированных перерывов.",
             context_note,
             *context_control_points[:1],
         ],
@@ -122,6 +129,10 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
             "Использовать аварийную остановку при невозможности безопасно продолжать работу.",
             "Сообщить мастеру смены или ответственному за участок.",
             "Не возобновлять работу до устранения причины и подтверждения допуска.",
+            # Required by paragraph 25 of Order 772n and missing from every draft
+            # until the regulatory-structure criterion was added.
+            "При травме оказать первую помощь по правилам, принятым на участке, "
+            "вызвать медицинского работника и сообщить руководителю работ.",
         ],
         common_mistakes=[
             "Выполнение операции по памяти без сверки с актуальной документацией.",
@@ -216,6 +227,8 @@ def _local_verification_items(
     items = [
         "Подтвердить актуальную локальную инструкцию, технологическую карту или административный регламент.",
         "Подтвердить точные режимы, допуски, нормы времени, применяемые СИЗ и форму фиксации результата.",
+        "Подтвердить установленный режим работы и регламентированных перерывов на участке.",
+        "Подтвердить принятый на предприятии порядок оказания первой помощи и вызова медицинского работника.",
         "Назначить ответственное лицо, которое подтверждает применимость инструкции к конкретному месту работ.",
     ]
     if not request.department:

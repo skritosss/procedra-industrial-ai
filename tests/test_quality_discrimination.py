@@ -52,6 +52,7 @@ def test_every_mutation_declares_a_target_criterion() -> None:
         "domain_risk_control",
         "implementation_readiness",
         "executability",
+        "regulatory_structure",
     }
     assert harness.MUTATIONS
     for mutation in harness.MUTATIONS:
