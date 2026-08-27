@@ -31,7 +31,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.evaluation import quality  # noqa: E402
+from app.evaluation import quality, regulatory  # noqa: E402
 from app.evaluation.quality import evaluate_instruction  # noqa: E402
 from app.main import app  # noqa: E402
 from app.schemas.instruction import (  # noqa: E402
@@ -94,6 +94,11 @@ class MutationCase:
     describe: str
     apply: Mutation | None = None
     apply_to_request: RequestMutation | None = None
+    # Some damage only exists in some scenarios: industry requirements apply to
+    # their own profile, so a mutation attacking them has nothing to remove
+    # elsewhere. Such a case must land somewhere rather than everywhere, and
+    # saying which is which keeps the strict rule strict for the rest.
+    scoped_to_profiles: bool = False
 
     def damage(
         self, instruction: WorkInstruction, request: InstructionRequest
@@ -570,6 +575,21 @@ def _strip_regulatory_sections(instruction: WorkInstruction) -> WorkInstruction:
     )
 
 
+def _strip_industry_requirements(instruction: WorkInstruction) -> WorkInstruction:
+    """Erase the vocabulary of the industry-specific requirements.
+
+    The words come from the registry itself, so a requirement added there is
+    attacked here without anyone remembering to update this list — the drift
+    that left the profile checks unreachable in the first place.
+    """
+    markers = tuple(
+        sorted({marker for item in regulatory.REQUIREMENTS if item.profiles for marker in item.markers})
+    )
+    return _apply_to_text_fields(
+        instruction, lambda text: _strip_words(text, markers, replacement="работа")
+    )
+
+
 MUTATIONS: tuple[MutationCase, ...] = (
     MutationCase(
         "placeholder_ppe",
@@ -831,6 +851,13 @@ MUTATIONS: tuple[MutationCase, ...] = (
         _strip_regulatory_sections,
     ),
     MutationCase(
+        "strip_industry_requirements",
+        ("regulatory_structure",),
+        "industry-specific requirements left without any trace",
+        _strip_industry_requirements,
+        scoped_to_profiles=True,
+    ),
+    MutationCase(
         "placeholder_control_points",
         ("completeness", "implementation_readiness"),
         "control points present but empty of meaning",
@@ -928,7 +955,16 @@ def run(limit: int | None = None) -> DiscriminationReport:
                     }
                 )
 
-    undetected = sorted({str(row["mutation"]) for row in mutation_rows if row["undetected"]})
+    scoped = {case.name for case in MUTATIONS if case.scoped_to_profiles}
+    landed = {str(row["mutation"]) for row in mutation_rows if row["targets_detected"]}
+    undetected = sorted(
+        {
+            str(row["mutation"])
+            for row in mutation_rows
+            if row["undetected"] and str(row["mutation"]) not in scoped
+        }
+        | {name for name in scoped if name not in landed}
+    )
     checks: list[CheckStat] = []
     for (criterion, label), values in sorted(observations.items()):
         passed = sum(1 for value in values if value >= quality._CHECK_PASS_THRESHOLD)

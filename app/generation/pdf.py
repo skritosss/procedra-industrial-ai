@@ -507,6 +507,13 @@ def _evaluation_summary(payload, styles: dict[str, ParagraphStyle]) -> list:
         # check travels with it rather than staying on a screen they saw once.
         Paragraph(REGULATORY_BASIS, styles["meta"]),
     ]
+    if evaluation.regulatory_sources:
+        left.append(
+            Paragraph(
+                "Сверено с документами: " + "; ".join(evaluation.regulatory_sources),
+                styles["meta"],
+            )
+        )
     header = Table(
         [[left, Paragraph(f"{evaluation.overall_score}", styles["score"])]],
         colWidths=[CONTENT_WIDTH - SCORE_COLUMN_WIDTH, SCORE_COLUMN_WIDTH],

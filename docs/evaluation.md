@@ -34,6 +34,36 @@ would be described. It can establish that a subject is addressed somewhere in th
 document. It cannot establish that it is addressed correctly, and it is not a
 compliance certificate.
 
+### Which documents are cited
+
+The requirements live in `app/evaluation/regulatory.py`, one entry per
+requirement, each naming its source. Which ones apply depends on the industry
+profile of the request: a medical procedure is judged against the rules for
+medical organisations, a construction one against the construction rules.
+Judging every draft against every industry would produce noise and teach a
+reader to skip the section. The documents used for a given evaluation are
+returned with it, and printed on the exported PDF.
+
+| Источник | Область |
+|---|---|
+| Приказ Минтруда России от 29.10.2021 № 772н | Содержание инструкций по охране труда — применяется всегда |
+| Приказ Минтруда России от 11.12.2020 № 883н | Строительство, реконструкция и ремонт |
+| Приказ Минтруда России от 27.11.2020 № 833н | Размещение, монтаж, обслуживание и ремонт технологического оборудования |
+| Приказ Минтруда России от 27.11.2020 № 835н | Работа с инструментом и приспособлениями |
+| Приказ Минтруда России от 29.10.2020 № 758н | Жилищно-коммунальное хозяйство |
+| Приказ Минтруда России от 09.12.2020 № 871н | Автомобильный транспорт |
+| Приказ Минтруда России от 07.12.2020 № 866н | Производство отдельных видов пищевой продукции |
+| Приказ Минтруда России от 18.12.2020 № 928н | Медицинские организации |
+| Приказ Минтруда России от 11.12.2020 № 881н | Подразделения пожарной охраны |
+
+**Two levels of citation, and the difference is not hidden.** Requirements from
+Order 772n were read in the text of the order and carry their paragraph numbers.
+The industry entries name a document that is in force and a subject that document
+governs, but the paragraph was not verified against the official text — those
+report as «тематическое требование» rather than claiming a paragraph. Inventing a
+number would be worse than omitting it: a reviewer who looked it up and found
+something else would be right to distrust the rest of the report.
+
 Two further sources inform the structure rather than the scoring. ГОСТ 3.1105-2011
 (ЕСТД) requires a technological instruction to open with its scope and purpose and
 to be written in the order the work is performed; both are scored, as

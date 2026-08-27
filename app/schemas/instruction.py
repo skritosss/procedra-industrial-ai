@@ -272,6 +272,10 @@ class InstructionEvaluation(BaseModel):
     expert_review_required: bool = True
     expert_review_notes: list[str] = Field(default_factory=list)
     safety_findings: list[SafetyFinding] = Field(default_factory=list)
+    # Which published documents the mandatory-section checks were taken from, for
+    # the profile of this request. Travels with the evaluation so a reviewer can
+    # see the basis without reading our source.
+    regulatory_sources: list[str] = Field(default_factory=list)
 
 
 class EvaluationRequest(BaseModel):

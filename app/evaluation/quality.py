@@ -2,6 +2,7 @@ from collections.abc import Mapping
 import re
 from typing import cast
 
+from app.evaluation import regulatory
 from app.evaluation.safety import analyze_untrusted_context
 from app.schemas.instruction import (
     CriterionScore,
@@ -157,14 +158,16 @@ def evaluate_instruction(
         _score_domain_risk_control(instruction, source_request, safety_findings),
         _score_implementation_readiness(instruction),
         _score_executability(instruction),
-        _score_regulatory_structure(instruction),
+        _score_regulatory_structure(instruction, source_request),
     ]
     overall = _unverified_draft_ceiling(instruction, _overall_score(criteria))
     missing = _detect_missing_elements(instruction)
     recommendations = _build_recommendations(criteria, missing, safety_findings)
     risk_level = cast(RiskLevel, _risk_level(overall, criteria, missing, safety_findings))
     expert_notes = _expert_review_notes(instruction, source_request, risk_level, safety_findings)
+    profile = source_request.industry_profile if source_request else "general"
     return InstructionEvaluation(
+        regulatory_sources=list(regulatory.cited_documents(profile)),
         overall_score=overall,
         criteria=criteria,
         missing_elements=missing,
@@ -601,72 +604,38 @@ _UNIT_MARKERS = (
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 
 
-# Order 772n of the Ministry of Labour (29.10.2021) lists what a workplace
-# instruction has to contain. These markers are the observable trace of each
-# requirement; the paragraph is named so a reviewer can check the mapping rather
-# than take it on trust.
-_REGULATORY_ELEMENTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    (
-        "указан порядок оказания первой помощи (п. 25)",
-        "не указан порядок оказания первой помощи пострадавшим",
-        ("перв", "помощь пострадав", "аптечк", "медицинск"),
-    ),
-    (
-        "указан порядок извещения о травме или неисправности (п. 22, 25)",
-        "не указан порядок извещения о травме или неисправности",
-        ("сообщить", "извест", "уведом", "доложить"),
-    ),
-    (
-        "описаны действия по окончании работы (п. 26)",
-        "не описаны действия по окончании работы",
-        ("по окончании", "передать смену", "передача смены", "заверш"),
-    ),
-    (
-        "указаны требования личной гигиены (п. 22, 26)",
-        "не указаны требования личной гигиены",
-        ("гигиен", "вымыть руки", "снять спецодежду", "санитарн"),
-    ),
-    (
-        "указан режим работы и перерывов (п. 22)",
-        "не указан режим работы и перерывов",
-        ("режим работ", "перерыв", "время отдыха", "регламентированн"),
-    ),
-    (
-        "названы опасные факторы и профессиональные риски (п. 22)",
-        "не названы опасные факторы и профессиональные риски",
-        ("опасн", "риск", "вредн", "фактор"),
-    ),
-    (
-        "описана проверка оборудования и защитных устройств до работы (п. 23)",
-        "не описана проверка оборудования и защитных устройств до работы",
-        ("огражд", "защитн", "исправн", "блокиров"),
-    ),
-    (
-        "описан порядок остановки и уборки рабочего места (п. 26)",
-        "не описан порядок остановки и уборки рабочего места",
-        ("отключ", "останов", "убрать", "очист", "отход"),
-    ),
-)
+def _score_regulatory_structure(
+    instruction: WorkInstruction,
+    source_request: InstructionRequest | None,
+) -> CriterionScore:
+    """Coverage of published requirements, general and industry-specific.
 
+    Every other criterion measures a property we chose. This one measures
+    requirements that exist whether we agree with them or not, which is what
+    lets a customer's safety engineer verify the mapping against documents they
+    already have. The requirements live in `app/evaluation/regulatory.py`, each
+    naming its source and, where it was read in the official text, its paragraph.
 
-def _score_regulatory_structure(instruction: WorkInstruction) -> CriterionScore:
-    """Coverage of what Order 772n requires an instruction to contain.
+    Which requirements apply depends on the industry profile of the request: a
+    medical procedure is judged against the rules for medical organisations, a
+    construction one against the construction rules. Judging every draft against
+    every industry would produce noise and teach a reader to ignore the section.
 
-    Every other criterion in this file measures a property we chose. This one
-    measures a requirement that exists whether we agree with it or not, which is
-    what makes it the only criterion a customer's safety engineer can verify
-    against a document they already have. A draft that scores well everywhere
-    else and omits first aid is not a good draft — it is one that cannot be put
-    into use.
-
-    Marker words are a proxy for the requirement, not proof of it: the criterion
-    can confirm the subject is addressed somewhere, not that it is addressed
-    correctly. That limit belongs in the published method, not in a footnote.
+    The limit is the same for all of them: a marker word shows that a subject is
+    addressed somewhere in the document. It does not show that it is addressed
+    correctly, and the criterion is not a statement of compliance.
     """
+    profile = source_request.industry_profile if source_request else "general"
     text = _instruction_text(instruction).lower()
-    checks = {label: any(marker in text for marker in markers)
-              for label, _, markers in _REGULATORY_ELEMENTS}
-    issue_labels = {label: issue for label, issue, _ in _REGULATORY_ELEMENTS}
+    requirements = regulatory.requirements_for(profile)
+    checks = {
+        f"{item.label} ({item.citation()})": any(marker in text for marker in item.markers)
+        for item in requirements
+    }
+    issue_labels = {
+        f"{item.label} ({item.citation()})": f"{item.issue} — {regulatory.SOURCES[item.source].document}"
+        for item in requirements
+    }
     return _criterion("regulatory_structure", checks, issue_labels)
 
 
