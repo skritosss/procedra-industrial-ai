@@ -356,12 +356,41 @@ def _score_request_focus(
     )
     instruction_text = _instruction_text(instruction)
     focus_tokens = _keywords(focus_text)
-    step_focus_share = _share(_keyword_overlap(focus_text, step.action) >= 0.08 for step in instruction.steps)
+    # There is no check here for "most steps relate to the task", and the reason
+    # is worth keeping. It compared each step's wording with the request, and the
+    # measured overlaps on a correct maintenance draft were 0.00-0.40 with no
+    # threshold separating the good steps from the bad: "stop the machine,
+    # release the pressure" shares nothing with "maintenance of a lathe" and is
+    # plainly part of it, while a generic template that repeats the request in
+    # every step scored full marks. The metric rewarded echoing the question over
+    # answering it, and it cost industry-specific content points for being
+    # specific. Tuning the threshold would have been fitting the number to the
+    # documents in front of it. Drift is still caught: the checks below judge the
+    # document as a whole, and off-topic steps move them.
     boundary_text = " ".join([instruction.purpose, instruction.scope, *instruction.quality_checklist]).lower()
+    document_body = " ".join(
+        [
+            instruction.purpose,
+            instruction.scope,
+            *instruction.safety_requirements,
+            *instruction.hazard_zones,
+            *instruction.prerequisites,
+            *instruction.control_points,
+            *instruction.quality_checklist,
+            *instruction.emergency_actions,
+        ]
+    )
+    # Measured on the demo set before the threshold was chosen: steps of a sound
+    # draft overlap the rest of its own document at 0.11-1.0, mostly above 0.4,
+    # while steps swapped for another procedure sit at 0.0-0.2. A step whose
+    # words appear nowhere else in the document it belongs to is the signal.
+    step_coherence = _share(
+        _keyword_overlap(step.action, document_body) >= 0.25 for step in instruction.steps
+    )
     checks = {
         "название или назначение отражает запрос": _keyword_overlap(focus_text, f"{instruction.title} {instruction.purpose}") >= 0.12,
         "текст инструкции сохраняет ключевые термины запроса": not focus_tokens or _keyword_overlap(focus_text, instruction_text) >= 0.16,
-        "большинство шагов связано с задачей": step_focus_share,
+        "шаги согласованы с остальной инструкцией": step_coherence,
         "есть явная граница, не расширяющая задачу": any(word in boundary_text for word in ["границ", "не расшир", "конкретн", "только"]),
         "нет признаков ухода в нерелевантную смежную операцию": not _has_scope_drift(source_request, instruction_text.lower()),
     }
