@@ -15,7 +15,14 @@ def focus_instruction_on_request(instruction: WorkInstruction, request: Instruct
     if not focus_phrase:
         return focused
 
-    focused.title = f"Инструкция: {_truncate(focus_phrase, 90)}"
+    # The equipment stays in the title. A shop with four lathes cannot tell which
+    # machine "Инструкция: Техническое обслуживание станка" covers, and the model
+    # is what a person searches the folder by. The focus layer used to drop it.
+    equipment = _single_line(request.equipment or "")
+    title = f"Инструкция: {_truncate(focus_phrase, 90)}"
+    if equipment and equipment.casefold() not in title.casefold():
+        title = _truncate(f"{title} ({equipment})", 140)
+    focused.title = title
     focused.purpose = _prepend_once(
         focused.purpose,
         f"Решить конкретную задачу пользователя: {focus_phrase}.",

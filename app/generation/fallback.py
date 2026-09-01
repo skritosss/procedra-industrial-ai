@@ -58,7 +58,10 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
     ]
 
     instruction = WorkInstruction(
-        title=f"Производственная инструкция: {_truncate_title(operation)}",
+        # The equipment belongs in the title. A shop with four lathes files
+        # "Инструкция: Техническое обслуживание станка" and cannot tell which
+        # machine it covers; the model is what a person searches by.
+        title=_instruction_title(operation, request.equipment),
         purpose=(
             f"Обеспечить безопасное, проверяемое и воспроизводимое выполнение операции: {operation}. "
             "Документ должен использоваться как AI-черновик для последующей проверки мастером, технологом и специалистом по охране труда."
@@ -239,6 +242,16 @@ def _extend(existing: list[str], additions: tuple[str, ...]) -> list[str]:
     """Append what is not already there, preserving the order of both."""
     known = {item.casefold() for item in existing}
     return existing + [item for item in additions if item.casefold() not in known]
+
+
+def _instruction_title(operation: str, equipment: str | None) -> str:
+    base = f"Производственная инструкция: {_truncate_title(operation)}"
+    if not equipment:
+        return base
+    machine = _single_line(equipment)
+    if machine.casefold() in base.casefold():
+        return base
+    return _truncate_title(f"{base} ({machine})", limit=140)
 
 
 def _context_bullets(context: str | None) -> list[str]:
