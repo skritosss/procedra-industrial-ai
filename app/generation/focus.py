@@ -39,13 +39,31 @@ def focus_instruction_on_request(instruction: WorkInstruction, request: Instruct
         "Не добавлены ли в инструкцию действия, которые выходят за пределы исходного запроса пользователя?",
     )
 
+    # A step that shares no words with the request is worth flagging — to the
+    # reviewer, not to the person doing the work. Appending "perform this step
+    # only within the task ..." to the action put a machine's note in the middle
+    # of an instruction someone reads at a machine, and it did something worse:
+    # the appended sentence contained the words of the request, so the very check
+    # that measures how many steps relate to the task was reading text the focus
+    # layer had just inserted. The signal now goes where it belongs.
     focus_tokens = _focus_tokens(request)
-    for step in focused.steps:
-        if focus_tokens and _overlap(step.action, focus_tokens) == 0:
-            step.action = _append_once(
-                step.action,
-                f"Выполнять этот шаг только в рамках задачи: {_truncate(focus_phrase, 100)}.",
-            )
+    unrelated = [
+        step.number
+        for step in focused.steps
+        if focus_tokens and _overlap(step.action, focus_tokens) == 0
+    ]
+    # Word overlap is a weak measure of whether a step belongs to a task:
+    # "hang the do-not-switch-on sign" shares nothing with "machine maintenance"
+    # and is plainly part of it. Naming such steps to a reviewer would send them
+    # after the wrong ones. The question is raised only when most of the document
+    # fails to relate, which is the case the focus layer exists for — a draft
+    # that drifted into another job.
+    if unrelated and len(unrelated) > len(focused.steps) / 2:
+        _prepend_unique(
+            focused.expert_review_questions,
+            f"Большая часть шагов не связана с задачей «{_truncate(focus_phrase, 80)}» — "
+            "проверить, не описывает ли инструкция другую операцию.",
+        )
     return focused
 
 

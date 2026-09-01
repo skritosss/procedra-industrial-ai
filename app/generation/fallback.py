@@ -191,7 +191,20 @@ def _apply_profile_specifics(
         instruction.local_verification_required = _extend(
             instruction.local_verification_required, block.local_verification
         )
+    # Control points are derived from the first steps, and the industry block
+    # changes which steps those are. Left alone, the document said "step 2 done:
+    # prepare the workplace" next to a step 2 about locking out the machine.
+    _rebuild_step_control_points(instruction)
     return instruction
+
+
+def _rebuild_step_control_points(instruction: WorkInstruction) -> None:
+    generic = [
+        point
+        for point in instruction.control_points
+        if not point.startswith("Шаг ")
+    ]
+    instruction.control_points = _control_points_from_steps(instruction.steps) + generic
 
 
 def _insert_profile_steps(instruction: WorkInstruction, block: ProfileSpecifics) -> None:
@@ -405,7 +418,7 @@ def _steps_for_type(
     context_bullets: list[str],
 ) -> list[InstructionStep]:
     context_reference = (
-        f"Отдельно сверить требование: {context_bullets[0]}"
+        f"Соблюдать требование из технического контекста: {context_bullets[0]}"
         if context_bullets
         else "Отдельно сверить локальные режимы, допуски и ограничения по документации участка."
     )

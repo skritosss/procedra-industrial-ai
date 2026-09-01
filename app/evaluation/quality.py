@@ -429,7 +429,13 @@ def _hazard_zones_addressed(instruction: WorkInstruction) -> float:
     return addressed / len(zones)
 
 
-_PREPARATION_MARKERS = ("подготовить", "сверить", "уточнить", "убедиться", "определить", "получить")
+# "подтвердить" and "проверить" open a procedure as often as "подготовить" does;
+# without them a maintenance draft that starts by confirming the work order was
+# judged to have no preparatory step at all.
+_PREPARATION_MARKERS = (
+    "подготовить", "сверить", "уточнить", "убедиться", "определить", "получить",
+    "подтвердить", "проверить", "осмотреть", "ознакомиться",
+)
 _COMPLETION_MARKERS = ("зафиксировать", "передать", "заверш", "оформить", "сдать", "занести в журнал")
 
 
