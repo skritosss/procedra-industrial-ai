@@ -88,19 +88,20 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   padding: var(--sp-1) var(--sp-2) var(--sp-5);
 }
 
+/* Shape and colour come from the SVG now, not from a background and a letter
+   set in type: Oxanium is not loaded and a system font would redraw the mark. */
 .sidebar-brandmark {
   display: grid;
   place-items: center;
   flex: none;
   width: var(--brandmark);
   height: var(--brandmark);
-  border-radius: var(--r-md);
-  background: var(--brand);
-  color: var(--action-text);
-  font-family: var(--font-brand);
-  font-size: var(--fs-small);
-  font-weight: var(--fw-bold);
+  background: none;
 }
+
+.sidebar-brandmark svg { width: 100%; height: 100%; display: block; }
+.sidebar-brandmark .mark-plate { fill: var(--brand); }
+.sidebar-brandmark .mark-letter { fill: var(--action-text); }
 
 /* The wordmark is a drawn asset, not type. CSS cannot swap an image source, so
    both variants ship and the theme picks one. */
@@ -922,8 +923,44 @@ input.error, select.error, textarea.error {
 }
 
 /* Screen and PDF share one family: same type scale, no chrome on paper. */
+/* Screen only shows the plate; print only shows the cut wordmark. */
+.print-mark { display: none; }
+
 @media print {
   .sidebar, .topbar, .result-toolbar, .form-footer, .panel-header, .modal-backdrop, .sidebar-backdrop { display: none; }
+
+  .result-body { padding-bottom: var(--sp-10); }
+
+  .print-mark {
+    display: grid;
+    justify-items: start;
+    position: fixed;
+    right: var(--sp-5);
+    bottom: var(--sp-4);
+    font-family: var(--font-ui);
+    font-size: 9pt;
+    font-weight: var(--fw-bold);
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  /* Both halves share one grid cell. Stacked as rows with a reduced leading,
+     the cut line drifts as soon as the size changes. */
+  .print-mark-top,
+  .print-mark-bottom { grid-area: 1 / 1; }
+
+  .print-mark-top {
+    color: var(--text);
+    clip-path: inset(0 0 50% 0);
+  }
+
+  /* 4px right is the cut itself, 1px down is the gap. Ratio to the size is
+     about 1:3 — keep it if the size changes. */
+  .print-mark-bottom {
+    color: var(--brand);
+    clip-path: inset(50% 0 0 0);
+    transform: translate(4px, 1px);
+  }
 
   .app-frame { display: block; }
   .layout { display: block; padding: 0; }
@@ -935,6 +972,11 @@ input.error, select.error, textarea.error {
 @media (prefers-color-scheme: dark) {
   .sidebar-wordmark--light { display: none; }
   .sidebar-wordmark--dark { display: block; }
+
+  /* A maroon plate on a dark ground contrasts 2.4:1 and reads as a smudge;
+     light plate with a dark letter gives 15.4:1. */
+  .sidebar-brandmark .mark-plate { fill: var(--text); }
+  .sidebar-brandmark .mark-letter { fill: var(--bg); }
 }
 
 /* ---------- Renderer surfaces the delivery did not cover ---------- */

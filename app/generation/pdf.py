@@ -117,6 +117,7 @@ def _styles(font_name: str, bold_font_name: str) -> dict[str, ParagraphStyle]:
             fontSize=9.5,
             leading=13,
             textColor=pdf_theme.INK,
+            bulletColor=pdf_theme.BRAND,
             leftIndent=8,
             bulletIndent=0,
             spaceAfter=2,
@@ -136,7 +137,7 @@ def _styles(font_name: str, bold_font_name: str) -> dict[str, ParagraphStyle]:
             fontName=bold_font_name,
             fontSize=9.5,
             leading=14,
-            textColor=pdf_theme.MUTED,
+            textColor=pdf_theme.BRAND,
         ),
         "term": ParagraphStyle(
             "InstructionTerm",
@@ -342,8 +343,19 @@ def _build_story(payload: InstructionResponse, styles: dict[str, ParagraphStyle]
 
 def _heading(story: list, styles: dict[str, ParagraphStyle], title: str) -> None:
     """A hairline plus a label. Space and a rule separate sections, not boxes."""
-    rule = Table([[""]], colWidths=[CONTENT_WIDTH], rowHeights=[0.4])
-    rule.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), pdf_theme.LINE)]))
+    rule = Table(
+        [["", ""]],
+        colWidths=[18 * mm, CONTENT_WIDTH - 18 * mm],
+        rowHeights=[0.7],
+    )
+    rule.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, 0), pdf_theme.BRAND),
+                ("BACKGROUND", (1, 0), (1, 0), pdf_theme.BRAND_SURFACE),
+            ]
+        )
+    )
     story.append(Spacer(1, 9))
     story.append(rule)
     story.append(Spacer(1, 5))
@@ -646,35 +658,57 @@ def _risk_label(risk_level: str) -> str:
 
 
 def _decorate_page(canvas, document, font_name: str) -> None:
-    """Footer only.
+    """Footer: a hairline, the cut wordmark and the page number.
 
-    The diagonal wash across every page said the same thing a reader could not
-    read and made the body harder to. The draft status now sits in the document
-    head, in words, where it is actually noticed.
+    Drawn per page by the document template, so the mark appears on every sheet
+    without the page-break tricks a browser needs. The diagonal wash that used to
+    cover each page is gone: it said the same thing a reader could not read and
+    made the body harder to.
     """
     width, _ = A4
     canvas.saveState()
-    canvas.setStrokeColor(pdf_theme.LINE)
-    canvas.setLineWidth(0.4)
+    canvas.setStrokeColor(pdf_theme.BRAND_SURFACE)
+    canvas.setLineWidth(0.6)
     canvas.line(document.leftMargin, 14 * mm, width - document.rightMargin, 14 * mm)
-    if BRAND_WORDMARK_PNG.is_file():
-        canvas.drawImage(
-            str(BRAND_WORDMARK_PNG),
-            document.leftMargin,
-            7.7 * mm,
-            width=25 * mm,
-            height=4.7 * mm,
-            preserveAspectRatio=True,
-            anchor="sw",
-            mask="auto",
-        )
-    else:
-        canvas.setFont(font_name, 8)
-        canvas.setFillColor(pdf_theme.MUTED)
-        canvas.drawString(document.leftMargin, 10 * mm, SERVICE_NAME)
+    _draw_cut_wordmark(canvas, document.leftMargin, 9.6 * mm, font_name)
     canvas.setFont(font_name, 8)
     canvas.setFillColor(pdf_theme.MUTED)
     canvas.drawRightString(width - document.rightMargin, 10 * mm, str(document.page))
+    canvas.restoreState()
+
+
+def _draw_cut_wordmark(canvas, x: float, y: float, font_name: str) -> None:
+    """PROCEDRA cut along the middle, the lower half shifted right and down.
+
+    The same device as on screen, built differently because a PDF has no
+    clip-path: each half is drawn through its own clipping rectangle. The offset
+    keeps the ratio used in the stylesheet — about a third of the type size to
+    the right, a twelfth down — so the two renderings look like one mark.
+    """
+    bold = f"{font_name}-Bold" if f"{font_name}-Bold" in pdfmetrics.getRegisteredFontNames() else font_name
+    size = 8.5
+    text = "PROCEDRA"
+    width = pdfmetrics.stringWidth(text, bold, size)
+    # Cut through the middle of the cap height, not the baseline: for this face
+    # caps rise about 0.72 of the size, so half of that is where the line goes.
+    middle = y + size * 0.36
+
+    canvas.saveState()
+    upper = canvas.beginPath()
+    upper.rect(x - 1, middle, width + 6, size)
+    canvas.clipPath(upper, stroke=0)
+    canvas.setFont(bold, size)
+    canvas.setFillColor(pdf_theme.INK)
+    canvas.drawString(x, y, text)
+    canvas.restoreState()
+
+    canvas.saveState()
+    lower = canvas.beginPath()
+    lower.rect(x - 1, middle - size, width + 6, size)
+    canvas.clipPath(lower, stroke=0)
+    canvas.setFont(bold, size)
+    canvas.setFillColor(pdf_theme.BRAND)
+    canvas.drawString(x + size / 3, y - size / 16, text)
     canvas.restoreState()
 
 

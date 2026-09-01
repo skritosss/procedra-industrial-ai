@@ -41,8 +41,10 @@ def test_web_app_returns_language_switcher() -> None:
     assert 'data-result-view="sources"' in source
     assert 'data-result-view="editor"' in source
     assert 'data-result-view="execution"' in source
-    assert '/static/assets/brand/procedra-wordmark-reversed.svg' in response.text
-    assert '/static/assets/brand/procedra-favicon.svg' in response.text
+    # The teal set belonged to the previous design; the page now carries one
+    # palette. The wordmark keeps its drawing and changes only its fills.
+    assert '/static/assets/brand/procedra-wordmark-brand-reversed.svg' in response.text
+    assert '/static/assets/procedra-mark.svg' in response.text
     assert '/static/vendor/tabler-icons/file-pencil.svg' in response.text
     assert '/static/vendor/tabler-icons/edit.svg' in response.text
     assert '/static/vendor/tabler-icons/markdown.svg' in response.text

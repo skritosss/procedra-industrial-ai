@@ -7,9 +7,7 @@
 <meta name="description" content="Procedra — AI-assisted industrial procedures with source traceability, expert approval, and execution evidence." />
 <meta name="theme-color" content="#17212B" />
 <title>Procedra — генератор производственных инструкций</title>
-<link rel="icon" href="/static/assets/brand/procedra-favicon.svg" type="image/svg+xml" />
-<link rel="icon" href="/static/assets/brand/procedra-favicon-32.png" sizes="32x32" type="image/png" />
-<link rel="apple-touch-icon" href="/static/assets/brand/procedra-apple-touch-icon.png" />
+<link rel="icon" href="/static/assets/procedra-mark.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/static/tokens.css" />
 <link rel="stylesheet" href="/static/app.css" />
 </head>
@@ -22,9 +20,14 @@
     </button>
 
     <div class="sidebar-brand">
-      <span class="sidebar-brandmark" aria-hidden="true">P</span>
-      <img class="sidebar-wordmark sidebar-wordmark--light" src="/static/assets/brand/procedra-wordmark.svg" alt="Procedra" />
-      <img class="sidebar-wordmark sidebar-wordmark--dark" src="/static/assets/brand/procedra-wordmark-reversed.svg" alt="" aria-hidden="true" />
+      <span class="sidebar-brandmark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" focusable="false">
+          <path class="mark-plate" d="M6 10 A 4 4 0 0 1 10 6 H 46 L 58 18 V 54 A 4 4 0 0 1 54 58 H 10 A 4 4 0 0 1 6 54 Z" />
+          <path class="mark-letter" fill-rule="evenodd" d="M20 16 H40 L46 22 V28 L40 34 H28 V48 H20 Z M28 22 H37 L39 24 V26 L37 28 H28 Z" />
+        </svg>
+      </span>
+      <img class="sidebar-wordmark sidebar-wordmark--light" src="/static/assets/brand/procedra-wordmark-brand.svg" alt="Procedra" />
+      <img class="sidebar-wordmark sidebar-wordmark--dark" src="/static/assets/brand/procedra-wordmark-brand-reversed.svg" alt="" aria-hidden="true" />
     </div>
 
     <nav class="sidebar-nav" data-i18n-aria-label="navAria">
@@ -88,7 +91,12 @@
       </button>
 
       <div class="mobile-brand">
-        <span class="sidebar-brandmark" aria-hidden="true">P</span>
+        <span class="sidebar-brandmark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" focusable="false">
+          <path class="mark-plate" d="M6 10 A 4 4 0 0 1 10 6 H 46 L 58 18 V 54 A 4 4 0 0 1 54 58 H 10 A 4 4 0 0 1 6 54 Z" />
+          <path class="mark-letter" fill-rule="evenodd" d="M20 16 H40 L46 22 V28 L40 34 H28 V48 H20 Z M28 22 H37 L39 24 V26 L37 28 H28 Z" />
+        </svg>
+      </span>
       </div>
 
       <div class="brand">
@@ -295,6 +303,10 @@
         </div>
 
         <div class="result-body" id="result" role="region" aria-labelledby="nav-instruction"></div>
+  <div class="print-mark" aria-hidden="true">
+    <span class="print-mark-top">PROCEDRA</span>
+    <span class="print-mark-bottom">PROCEDRA</span>
+  </div>
       </section>
     </div>
   </div>
