@@ -2,6 +2,7 @@ import re
 
 from app.evaluation.safety import enforce_provenance_and_safety
 from app.generation.industry_profiles import profile_guardrails, profile_label
+from app.generation.profile_specifics import ProfileSpecifics, specifics_for
 from app.schemas.instruction import InstructionRequest, InstructionStep, InstructionWorkflow, WorkInstruction
 
 
@@ -145,7 +146,86 @@ def generate_fallback_instruction(request: InstructionRequest) -> WorkInstructio
         expert_review_questions=expert_questions,
         workflow=_workflow(request, local_verification),
     )
+    instruction = _apply_profile_specifics(instruction, request)
     return enforce_provenance_and_safety(instruction, request)
+
+
+def _apply_profile_specifics(
+    instruction: WorkInstruction, request: InstructionRequest
+) -> WorkInstruction:
+    """Add the industry content this particular job calls for.
+
+    Applied after the template is built rather than woven into it, so the
+    operation structure stays one thing and the industry layer stays another.
+    Blocks are selected by profile, operation type and the words of the request:
+    a manhole gets confined-space requirements, a stairwell lamp does not.
+    """
+    # Deliberately not technical_context: by the time generation runs, that field
+    # has been enriched with retrieved documentation, and the retrieved text for a
+    # utilities request mentions manholes whatever the job is. A dispatcher
+    # handling a phone call was given a permit-to-work and a gas test that way.
+    # Triggers read only what the person actually asked for.
+    request_text = " ".join(
+        part
+        for part in [
+            request.task,
+            request.operation_name or "",
+            request.equipment or "",
+            request.department or "",
+        ]
+        if part
+    )
+    blocks = specifics_for(request.industry_profile, request.instruction_type, request_text)
+    if not blocks:
+        return instruction
+
+    for block in blocks:
+        _insert_profile_steps(instruction, block)
+        instruction.safety_requirements = _extend(instruction.safety_requirements, block.safety_requirements)
+        instruction.hazard_zones = _extend(instruction.hazard_zones, block.hazard_zones)
+        instruction.required_ppe = _extend(instruction.required_ppe, block.required_ppe)
+        instruction.emergency_actions = _extend(instruction.emergency_actions, block.emergency_actions)
+        instruction.expert_review_questions = _extend(
+            instruction.expert_review_questions, block.expert_questions
+        )
+        instruction.local_verification_required = _extend(
+            instruction.local_verification_required, block.local_verification
+        )
+    return instruction
+
+
+def _insert_profile_steps(instruction: WorkInstruction, block: ProfileSpecifics) -> None:
+    """Put the industry steps after the opening check, before the work itself.
+
+    They are preparatory by nature — a permit, a gas test, a lockout — so they
+    belong where a person would actually do them, not appended at the end.
+    """
+    if not block.steps:
+        return
+    # Numbered from a placeholder value the schema accepts; the real numbers are
+    # assigned below once the order is known.
+    added = [
+        InstructionStep(
+            number=index,
+            action=step.action,
+            expected_result=step.expected_result,
+            safety_note=step.safety_note,
+            verification_method=step.verification_method,
+            common_mistakes=list(step.common_mistakes),
+        )
+        for index, step in enumerate(block.steps, start=1)
+    ]
+    head = instruction.steps[:1]
+    tail = instruction.steps[1:]
+    instruction.steps = head + added + tail
+    for index, step in enumerate(instruction.steps, start=1):
+        step.number = index
+
+
+def _extend(existing: list[str], additions: tuple[str, ...]) -> list[str]:
+    """Append what is not already there, preserving the order of both."""
+    known = {item.casefold() for item in existing}
+    return existing + [item for item in additions if item.casefold() not in known]
 
 
 def _context_bullets(context: str | None) -> list[str]:
