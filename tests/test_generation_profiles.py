@@ -47,3 +47,48 @@ def test_added_steps_are_renumbered_without_gaps() -> None:
     )
     numbers = [step.number for step in generate_fallback_instruction(request).steps]
     assert numbers == list(range(1, len(numbers) + 1))
+
+
+def test_a_request_that_does_not_match_its_profile_is_flagged() -> None:
+    """The evaluator judges how well a draft answers the request. It cannot see
+    that the request itself was filed under the wrong industry, and a stationery
+    count submitted as manufacturing scores well precisely because the answer
+    fits the question."""
+    from app.evaluation.quality import evaluate_instruction
+
+    request = InstructionRequest(
+        task="Составить инструкцию по инвентаризации канцелярии на складе офиса",
+        operation_name="Инвентаризация канцелярии",
+        department="Административный склад",
+        equipment="Стеллаж для канцелярии",
+        industry_profile="manufacturing",
+    )
+    evaluation = evaluate_instruction(generate_fallback_instruction(request), request)
+    assert any("не похожа на отраслевой профиль" in item for item in evaluation.recommendations)
+
+
+def test_every_demo_scenario_matches_its_own_profile() -> None:
+    """A vocabulary that flags correct requests would train people to ignore it."""
+    import json
+    from pathlib import Path
+
+    from app.generation.industry_profiles import request_matches_profile
+
+    scenarios = json.loads(
+        (Path(__file__).resolve().parents[1] / "examples" / "demo_scenarios.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for scenario in scenarios:
+        payload = scenario["payload"]
+        described = " ".join(
+            part
+            for part in [
+                payload.get("task", ""),
+                payload.get("operation_name") or "",
+                payload.get("equipment") or "",
+                payload.get("department") or "",
+            ]
+            if part
+        )
+        assert request_matches_profile(payload["industry_profile"], described), scenario["id"]

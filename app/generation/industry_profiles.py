@@ -83,3 +83,73 @@ def render_profile_context(profile: str) -> str:
             *(f"- {item}" for item in guardrails),
         ]
     )
+
+# Vocabulary that marks a request as belonging to a profile. Used only to notice
+# a mismatch between the chosen industry and the described work — a request for a
+# stationery count filed under manufacturing — never to refuse generation. The
+# person choosing the profile may know something the word list does not, so the
+# result is a note in the evaluation, not a rejection.
+PROFILE_VOCABULARY = {
+    "manufacturing": (
+        "станок", "оборудован", "цех", "участок", "агрегат", "пресс", "конвейер",
+        "деталь", "заготовк", "инструмент", "смена", "наладк", "механизм", "узел",
+    ),
+    "construction": (
+        "строительн", "монтаж", "объект", "площадк", "леса", "кровл", "бетон",
+        "арматур", "высот", "котлован", "опалубк", "перекрыт",
+    ),
+    "occupational_safety": (
+        "охран", "труд", "инструктаж", "риск", "безопасн", "нарушени", "проверк",
+        "обучени", "сиз", "допуск",
+    ),
+    "emergency_response": (
+        "эвакуац", "авари", "пожар", "спасат", "чрезвычайн", "оповещ", "тревог",
+        "возгоран", "мчс", "происшеств",
+    ),
+    "public_service": (
+        "заявител", "услуг", "документ", "регламент", "приём", "обращени",
+        "гражданин", "выдач", "справк", "заявлени",
+    ),
+    "housing_utilities": (
+        "жкх", "дом", "жилец", "протечк", "стояк", "тепл", "водоснабж", "колодец",
+        "диспетчер", "сет", "подъезд", "коммунальн", "авари",
+    ),
+    "healthcare": (
+        "пациент", "медицинск", "кабинет", "процедур", "стерилиз", "дезинф",
+        "отход", "инъекц", "палат", "врач", "сестр", "санитарн",
+    ),
+    "education": (
+        "учен", "занят", "класс", "кабинет", "лаборатор", "мастерск",
+        "инструктаж", "преподавател", "студент", "практическ",
+    ),
+    "food_production": (
+        "пищев", "продукц", "санитар", "линия", "цех", "сырь", "партия",
+        "маркиров", "хранени", "температур", "мойк",
+    ),
+    "transport": (
+        "транспорт", "автомобил", "рейс", "водител", "погрузк", "маршрут",
+        "предрейс", "прицеп", "перевозк", "техническое состояние",
+    ),
+    "information_security": (
+        "доступ", "парол", "учётн", "учетн", "данн", "инцидент", "фишинг",
+        "вложени", "ссылк", "информационн", "система",
+    ),
+    "general": (),
+}
+
+
+def profile_vocabulary(profile: str) -> tuple[str, ...]:
+    return PROFILE_VOCABULARY.get(profile, ())
+
+
+def request_matches_profile(profile: str, request_text: str) -> bool:
+    """Whether the described work looks like it belongs to the chosen industry.
+
+    True when the profile has no vocabulary of its own: "general" makes no claim
+    about the kind of work, so there is nothing to contradict.
+    """
+    vocabulary = profile_vocabulary(profile)
+    if not vocabulary:
+        return True
+    lowered = request_text.casefold()
+    return any(term in lowered for term in vocabulary)

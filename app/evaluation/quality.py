@@ -3,6 +3,7 @@ import re
 from typing import cast
 
 from app.evaluation import regulatory
+from app.generation.industry_profiles import profile_label, request_matches_profile
 from app.evaluation.safety import analyze_untrusted_context
 from app.schemas.instruction import (
     CriterionScore,
@@ -163,6 +164,9 @@ def evaluate_instruction(
     overall = _unverified_draft_ceiling(instruction, _overall_score(criteria))
     missing = _detect_missing_elements(instruction)
     recommendations = _build_recommendations(criteria, missing, safety_findings)
+    mismatch = _profile_mismatch_note(source_request)
+    if mismatch:
+        recommendations.insert(0, mismatch)
     risk_level = cast(RiskLevel, _risk_level(overall, criteria, missing, safety_findings))
     expert_notes = _expert_review_notes(instruction, source_request, risk_level, safety_findings)
     profile = source_request.industry_profile if source_request else "general"
@@ -234,6 +238,38 @@ def _unverified_draft_ceiling(instruction: WorkInstruction, score: int) -> int:
     # document from another. Scaling keeps the ordering and still puts the top of
     # the scale out of reach until a person has confirmed something.
     return round(score * UNVERIFIED_DRAFT_CEILING / 100)
+
+
+def _profile_mismatch_note(source_request: InstructionRequest | None) -> str | None:
+    """Say when the described work does not look like the chosen industry.
+
+    The evaluator judges how well a draft answers the request; it has no way to
+    notice that the request itself was filed under the wrong profile. A stationery
+    count submitted as manufacturing produces a good answer to a question nobody
+    on a shop floor asked, and scores accordingly.
+
+    Deliberately a note and not a refusal: the person choosing the profile may
+    know something a word list does not, and blocking generation on a vocabulary
+    miss would be worse than saying nothing.
+    """
+    if source_request is None:
+        return None
+    described = " ".join(
+        part
+        for part in [
+            source_request.task,
+            source_request.operation_name or "",
+            source_request.equipment or "",
+            source_request.department or "",
+        ]
+        if part
+    )
+    if request_matches_profile(source_request.industry_profile, described):
+        return None
+    return (
+        f"Описанная работа не похожа на отраслевой профиль «{profile_label(source_request.industry_profile)}». "
+        "Проверьте выбор профиля: от него зависят применяемые правила и профильные требования."
+    )
 
 
 def _score_completeness(instruction: WorkInstruction) -> CriterionScore:
