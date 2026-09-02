@@ -49,3 +49,8 @@ docs/research/*
 # Design deliveries: raw hand-off files, the canvas editor runtime and uploads
 # that came with them. The integrated result lives in app/static.
 docs/design/incoming/
+
+# Behaviour baseline captured before cleanup. Local evidence, not a deliverable.
+baseline/
+CHECK.md
+design-qa.md
