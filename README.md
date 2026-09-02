@@ -17,8 +17,16 @@ For a quick technical review, run the local app without external AI credentials:
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
 uvicorn app.main:app --reload
 ```
+
+`cp .env.example .env` is not optional. `DEPLOYMENT_MODE` defaults to
+`production`, which refuses to start until authentication, registration, password
+length and the video host allowlist are configured; the template selects the
+deterministic local mode instead. Skip it and the server starts, fails on
+initialisation and serves nothing. `make install && make run` does the same thing
+and copies the template for you.
 
 For queued video processing, start the durable worker in a second terminal:
 

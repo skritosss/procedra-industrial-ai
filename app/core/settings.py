@@ -234,8 +234,30 @@ class Settings(BaseSettings):
                 "VIDEO_ALLOWED_HOSTS must contain at least one host while VIDEO_URL_INGEST_ENABLED is true"
             )
         if unsafe_options:
-            raise ValueError("Unsafe production configuration: " + "; ".join(unsafe_options))
+            raise ValueError(
+                "Unsafe production configuration: "
+                + "; ".join(unsafe_options)
+                + _missing_env_file_hint()
+            )
         return self
+
+
+def _missing_env_file_hint() -> str:
+    """Point a first-time reader at the one command they skipped.
+
+    The list above is correct and useless to someone who just cloned the
+    repository: it describes how to harden a production deployment, while the
+    actual mistake is that no environment file exists yet. The hint is added only
+    when neither file is present, so an operator who configured production on
+    purpose is not told to copy a demo template over it.
+    """
+    root = PROJECT_ROOT
+    if (root / ".env").exists() or (root / ".env.local").exists():
+        return ""
+    return (
+        ". No .env or .env.local was found: for a local run, copy the template "
+        "first — cp .env.example .env"
+    )
 
 
 @lru_cache

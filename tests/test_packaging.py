@@ -512,3 +512,27 @@ def test_stand_template_is_stricter_than_the_local_template() -> None:
     assert stand.auth_max_failed_attempts < local.auth_max_failed_attempts
     assert stand.rate_limit_requests < local.rate_limit_requests
     assert stand.auth_rate_limit_requests < local.auth_rate_limit_requests
+
+
+def test_a_missing_env_file_is_named_in_the_production_refusal(monkeypatch) -> None:
+    """The hardening list is correct and useless to someone who just cloned the
+    repository: their mistake is a missing file, not five unset switches."""
+    import app.core.settings as settings_module
+
+    monkeypatch.setattr(settings_module, "PROJECT_ROOT", PROJECT_ROOT / "no-such-directory")
+
+    with pytest.raises(ValidationError, match="cp .env.example .env"):
+        Settings(_env_file=None, deployment_mode="production")
+
+
+def test_an_operator_with_an_env_file_is_not_told_to_copy_a_template(monkeypatch, tmp_path) -> None:
+    """A deliberate production deployment must not be advised to overwrite its
+    configuration with the demo template."""
+    import app.core.settings as settings_module
+
+    (tmp_path / ".env").write_text("DEPLOYMENT_MODE=production\n", encoding="utf-8")
+    monkeypatch.setattr(settings_module, "PROJECT_ROOT", tmp_path)
+
+    with pytest.raises(ValidationError) as raised:
+        Settings(_env_file=None, deployment_mode="production")
+    assert "cp .env.example .env" not in str(raised.value)
