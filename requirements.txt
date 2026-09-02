@@ -11,7 +11,7 @@ types-reportlab==4.5.1.20260521
 types-yt-dlp==2026.3.17.20260605
 httpx2==2.3.0
 reportlab==4.5.1
-pypdf==6.15.0
+pypdf==6.16.1
 python-multipart==0.0.31
 opencv-python==4.13.0.92
 yt-dlp==2026.7.4
