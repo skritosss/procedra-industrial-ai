@@ -92,3 +92,48 @@ def test_every_demo_scenario_matches_its_own_profile() -> None:
             if part
         )
         assert request_matches_profile(payload["industry_profile"], described), scenario["id"]
+
+
+def test_welding_gains_hot_work_content_and_a_lathe_startup_does_not() -> None:
+    def instruction(task: str, instruction_type: str = "workplace_preparation"):
+        return generate_fallback_instruction(
+            InstructionRequest(
+                task=task, industry_profile="manufacturing", instruction_type=instruction_type
+            )
+        )
+
+    welding = instruction("Подготовка поста полуавтоматической сварки к началу смены")
+    lathe = instruction("Запуск токарного станка после простоя", "equipment_startup")
+
+    assert any("дуг" in zone for zone in welding.hazard_zones)
+    assert any("щиток" in item.casefold() for item in welding.required_ppe)
+    assert any("наряд-допуск" in step.action.casefold() for step in welding.steps)
+    # The generic draft must not inherit welding content it has no use for.
+    assert not any("дуг" in zone for zone in lathe.hazard_zones)
+    assert not any("щиток" in item.casefold() for item in lathe.required_ppe)
+
+
+def test_welding_rules_are_cited_only_when_the_job_is_welding() -> None:
+    from app.evaluation.regulatory import cited_documents
+
+    welding = cited_documents("manufacturing", "Подготовка сварочного поста к смене")
+    turning = cited_documents("manufacturing", "Запуск токарного станка после простоя")
+
+    assert any("884н" in document for document in welding)
+    assert any("1479" in document for document in welding)
+    assert not any("884н" in document for document in turning)
+    assert not any("1479" in document for document in turning)
+
+
+def test_the_welding_rules_read_the_request_and_not_the_found_documents() -> None:
+    """The same trap the generator blocks fell into: enriched context carries the
+    vocabulary of documents the user never asked about."""
+    request = InstructionRequest(
+        task="Запуск токарного станка после простоя",
+        industry_profile="manufacturing",
+        instruction_type="equipment_startup",
+        technical_context="Сварочные работы на участке ведутся по отдельному наряду-допуску.",
+    )
+    instruction = generate_fallback_instruction(request)
+
+    assert not any("дуг" in zone for zone in instruction.hazard_zones)

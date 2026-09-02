@@ -41,7 +41,15 @@ requirement, each naming its source. Which ones apply depends on the industry
 profile of the request: a medical procedure is judged against the rules for
 medical organisations, a construction one against the construction rules.
 Judging every draft against every industry would produce noise and teach a
-reader to skip the section. The documents used for a given evaluation are
+reader to skip the section.
+
+Two documents are attached to a kind of work rather than to an industry. The
+welding rules and the fire-safety regime govern welding wherever it happens, and
+they do not govern the other jobs in the same shop, so they are cited only when
+the request describes welding, cutting or another hot-work operation. The trigger
+reads what the user asked for and not the documents the retrieval layer found:
+enriched context mentions welding on any shop-floor request, and reading it would
+attach a fire-safety requirement to a draft about starting a lathe. The documents used for a given evaluation are
 returned with it, and printed on the exported PDF.
 
 | Источник | Область |
@@ -55,15 +63,22 @@ returned with it, and printed on the exported PDF.
 | Приказ Минтруда России от 07.12.2020 № 866н | Производство отдельных видов пищевой продукции |
 | Приказ Минтруда России от 18.12.2020 № 928н | Медицинские организации |
 | Приказ Минтруда России от 11.12.2020 № 881н | Подразделения пожарной охраны |
+| Приказ Минтруда России от 11.12.2020 № 884н | Электросварочные и газосварочные работы — по виду работ, а не по отрасли |
+| Постановление Правительства РФ от 16.09.2020 № 1479 | Противопожарный режим: наряд-допуск на огневые работы, очистка зоны, наблюдение после работ |
 | Постановление Правительства РФ от 24.12.2021 № 2464 | Обучение по охране труда, инструктажи, стажировка — применяется всегда |
 | ГОСТ 3.1105-2011 (ЕСТД) | Вводная часть и технологическая последовательность изложения — применяется всегда |
 | ГОСТ 12.2.003-91 (ССБТ) | Производственное оборудование: органы управления, защитные устройства, аварийная остановка |
 | ГОСТ 12.3.002-2014 (ССБТ) | Производственные процессы: устранение и снижение опасных факторов |
 
 **ГОСТ 12.0.004-2015 намеренно не используется.** Он покрывает ровно эту область,
-но его применение в России приостановлено до 01.09.2026 в пользу постановления
+но его применение в России было приостановлено в пользу постановления
 Правительства № 2464. Ссылка на приостановленный стандарт стоила бы больше
 доверия, чем стоит сама проверка.
+
+Срок приостановки был указан как 01.09.2026. Эта дата прошла, а изменения в
+реестр не вносились: включать стандарт обратно можно только после проверки его
+текущего статуса по официальному источнику, а не по календарю. До такой проверки
+исключение остаётся в силе — `требует уточнения`.
 
 **Two levels of citation, and the difference is not hidden.** Requirements from
 Order 772n were read in the text of the order and carry their paragraph numbers.

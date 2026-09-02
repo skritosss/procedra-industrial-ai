@@ -38,9 +38,20 @@ class RegulatoryRequirement:
     markers: tuple[str, ...]
     paragraph: str | None = None
     profiles: tuple[str, ...] = ()
+    # Words that must appear in the request for the requirement to apply. Empty
+    # means it applies to every request of its profiles. Some documents govern a
+    # kind of work rather than an industry: the welding rules bind a machine
+    # shop only when the job is welding, and requiring their subject in a draft
+    # about starting a lathe would mark a correct document as incomplete.
+    triggers: tuple[str, ...] = ()
 
-    def applies_to(self, profile: str) -> bool:
-        return not self.profiles or profile in self.profiles
+    def applies_to(self, profile: str, request_text: str = "") -> bool:
+        if self.profiles and profile not in self.profiles:
+            return False
+        if not self.triggers:
+            return True
+        lowered = request_text.casefold()
+        return any(trigger in lowered for trigger in self.triggers)
 
     def citation(self) -> str:
         return f"{self.paragraph}" if self.paragraph else "тематическое требование"
@@ -106,6 +117,16 @@ SOURCES: dict[str, RegulatorySource] = {
         "gost_12_3_002",
         "ГОСТ 12.3.002-2014 (ССБТ)",
         "Процессы производственные. Общие требования безопасности",
+    ),
+    "884n": RegulatorySource(
+        "884n",
+        "Приказ Минтруда России от 11.12.2020 № 884н",
+        "Правила по охране труда при выполнении электросварочных и газосварочных работ",
+    ),
+    "pp_1479": RegulatorySource(
+        "pp_1479",
+        "Постановление Правительства РФ от 16.09.2020 № 1479",
+        "Правила противопожарного режима в Российской Федерации",
     ),
     "pp_2464": RegulatorySource(
         "pp_2464",
@@ -228,6 +249,25 @@ _BY_PROFILE: tuple[RegulatoryRequirement, ...] = (
         ("биологическ", "инфекц", "отход", "дезинф", "стерилиз"),
         profiles=("healthcare",),
     ),
+    # Bound to the kind of work, not to the industry. Welding happens in a
+    # machine shop and on a construction site, and in neither does it happen in
+    # every job, so both requirements carry triggers.
+    RegulatoryRequirement(
+        "884n",
+        "учтены защита от излучения дуги, вентиляция и заземление при сварке",
+        "не учтены защита от излучения дуги, вентиляция или заземление при сварке",
+        ("щиток", "маск", "вытяжн", "вентиляц", "заземлен", "искр"),
+        profiles=("manufacturing", "construction"),
+        triggers=("сварк", "сварочн", "сварщик", "огневы", "газорезк", "наплавк"),
+    ),
+    RegulatoryRequirement(
+        "pp_1479",
+        "учтены наряд-допуск на огневые работы, очистка зоны и средства пожаротушения",
+        "не учтены наряд-допуск на огневые работы, очистка зоны или средства пожаротушения",
+        ("наряд-допуск", "огнетушит", "горюч", "пожарн", "наблюдающ"),
+        profiles=("manufacturing", "construction"),
+        triggers=("сварк", "сварочн", "сварщик", "огневы", "газорезк", "наплавк"),
+    ),
     RegulatoryRequirement(
         "881n",
         "учтены связь, оповещение и средства защиты органов дыхания",
@@ -284,10 +324,16 @@ _STANDARDS: tuple[RegulatoryRequirement, ...] = (
 REQUIREMENTS: tuple[RegulatoryRequirement, ...] = _GENERAL + _STANDARDS + _BY_PROFILE
 
 
-def requirements_for(profile: str) -> tuple[RegulatoryRequirement, ...]:
-    return tuple(item for item in REQUIREMENTS if item.applies_to(profile))
+def requirements_for(profile: str, request_text: str = "") -> tuple[RegulatoryRequirement, ...]:
+    return tuple(item for item in REQUIREMENTS if item.applies_to(profile, request_text))
 
 
-def cited_documents(profile: str) -> tuple[str, ...]:
-    keys = {item.source for item in requirements_for(profile)}
+def cited_documents(profile: str, request_text: str = "") -> tuple[str, ...]:
+    """The documents a draft of this kind is judged against.
+
+    The list is what the interface shows under «Сверено с документами», so it
+    has to name the documents actually used and nothing else. A document that
+    only applies to welding is named when the job is welding.
+    """
+    keys = {item.source for item in requirements_for(profile, request_text)}
     return tuple(SOURCES[key].document for key in sorted(keys))

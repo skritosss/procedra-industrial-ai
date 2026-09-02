@@ -171,7 +171,7 @@ def evaluate_instruction(
     expert_notes = _expert_review_notes(instruction, source_request, risk_level, safety_findings)
     profile = source_request.industry_profile if source_request else "general"
     return InstructionEvaluation(
-        regulatory_sources=list(regulatory.cited_documents(profile)),
+        regulatory_sources=list(regulatory.cited_documents(profile, _request_subject(source_request))),
         overall_score=overall,
         criteria=criteria,
         missing_elements=missing,
@@ -238,6 +238,28 @@ def _unverified_draft_ceiling(instruction: WorkInstruction, score: int) -> int:
     # document from another. Scaling keeps the ordering and still puts the top of
     # the scale out of reach until a person has confirmed something.
     return round(score * UNVERIFIED_DRAFT_CEILING / 100)
+
+
+def _request_subject(source_request: InstructionRequest | None) -> str:
+    """What the request says the job is.
+
+    The technical context is left out on purpose. It is enriched before it
+    reaches here, so a dispatcher's request could pick up the vocabulary of a
+    permit-to-work it never asked for — the same trap the generator's profile
+    blocks fell into twice.
+    """
+    if source_request is None:
+        return ""
+    return " ".join(
+        part
+        for part in [
+            source_request.task,
+            source_request.operation_name or "",
+            source_request.equipment or "",
+            source_request.department or "",
+        ]
+        if part
+    )
 
 
 def _profile_mismatch_note(source_request: InstructionRequest | None) -> str | None:
@@ -698,7 +720,7 @@ def _score_regulatory_structure(
     """
     profile = source_request.industry_profile if source_request else "general"
     text = _instruction_text(instruction).lower()
-    requirements = regulatory.requirements_for(profile)
+    requirements = regulatory.requirements_for(profile, _request_subject(source_request))
     checks = {
         f"{item.label} ({item.citation()})": any(marker in text for marker in item.markers)
         for item in requirements
