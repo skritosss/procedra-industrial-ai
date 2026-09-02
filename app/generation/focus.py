@@ -46,51 +46,23 @@ def focus_instruction_on_request(instruction: WorkInstruction, request: Instruct
         "Не добавлены ли в инструкцию действия, которые выходят за пределы исходного запроса пользователя?",
     )
 
-    # A step that shares no words with the request is worth flagging — to the
-    # reviewer, not to the person doing the work. Appending "perform this step
-    # only within the task ..." to the action put a machine's note in the middle
-    # of an instruction someone reads at a machine, and it did something worse:
-    # the appended sentence contained the words of the request, so the very check
-    # that measures how many steps relate to the task was reading text the focus
-    # layer had just inserted. The signal now goes where it belongs.
-    focus_tokens = _focus_tokens(request)
-    unrelated = [
-        step.number
-        for step in focused.steps
-        if focus_tokens and _overlap(step.action, focus_tokens) == 0
-    ]
-    # Word overlap is a weak measure of whether a step belongs to a task:
-    # "hang the do-not-switch-on sign" shares nothing with "machine maintenance"
-    # and is plainly part of it. Naming such steps to a reviewer would send them
-    # after the wrong ones. The question is raised only when most of the document
-    # fails to relate, which is the case the focus layer exists for — a draft
-    # that drifted into another job.
-    if unrelated and len(unrelated) > len(focused.steps) / 2:
-        _prepend_unique(
-            focused.expert_review_questions,
-            f"Большая часть шагов не связана с задачей «{_truncate(focus_phrase, 80)}» — "
-            "проверить, не описывает ли инструкция другую операцию.",
-        )
+    # A "most steps do not relate to the task" question used to be raised here,
+    # from the word overlap between each step's action and the request. It was
+    # removed rather than tuned: the overlap ran on a hand-written stemmer, and
+    # the stemmer does not survive Russian cases. "Рабочее место" in a request
+    # became {рабоче, место} while "рабочего места" in a step became {рабочего},
+    # so a step describing exactly what was asked for scored zero and the draft
+    # was reported to the reviewer as off-topic. Raising the threshold would not
+    # help — the blindness is to grammar, not to the count — and doing it
+    # properly needs a morphological analyser, which is a dependency this check
+    # does not earn. A draft that drifted into another job is already caught by
+    # the profile-mismatch note in the evaluator, which reads the request rather
+    # than guessing at word forms.
     return focused
 
 
 def _focus_phrase(request: InstructionRequest) -> str:
     return _single_line(request.operation_name or request.task)
-
-
-def _focus_tokens(request: InstructionRequest) -> set[str]:
-    return _tokens(
-        " ".join(
-            part
-            for part in [
-                request.task,
-                request.operation_name or "",
-                request.equipment or "",
-                request.department or "",
-            ]
-            if part
-        )
-    )
 
 
 def _prepend_once(value: str, prefix: str) -> str:
@@ -121,53 +93,3 @@ def _truncate(value: str, limit: int) -> str:
     if len(compact) <= limit:
         return compact
     return compact[: limit + 1].rsplit(" ", 1)[0].rstrip(" ,.;:") + "..."
-
-
-def _overlap(text: str, focus_tokens: set[str]) -> int:
-    return len(_tokens(text) & focus_tokens)
-
-
-def _tokens(text: str) -> set[str]:
-    stopwords = {
-        "инструкц",
-        "провер",
-        "подготов",
-        "выполн",
-        "операц",
-        "задач",
-        "пользовател",
-        "работ",
-        "рабоч",
-        "мест",
-        "оборудован",
-        "безопасн",
-    }
-    tokens = set()
-    for raw in re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", text.lower().replace("ё", "е")):
-        token = _normalize(raw)
-        if len(token) >= 4 and token not in stopwords:
-            tokens.add(token)
-    return tokens
-
-
-def _normalize(token: str) -> str:
-    replacements = {
-        "аварийная": "аварийн",
-        "аварийной": "аварийн",
-        "аварийную": "аварийн",
-        "кнопка": "кнопк",
-        "кнопки": "кнопк",
-        "кнопку": "кнопк",
-        "ограждение": "огражд",
-        "ограждения": "огражд",
-        "ограждений": "огражд",
-        "станка": "станок",
-        "станке": "станок",
-    }
-    if token in replacements:
-        return replacements[token]
-    endings = ("иями", "ями", "ами", "ого", "ему", "ыми", "ими", "ить", "ать", "ией", "ия", "ий", "ый", "ой", "ые", "ая", "ое", "ов", "ев", "ам", "ям", "ах", "ях", "ом", "ем", "а", "я", "ы", "и", "у", "ю", "е")
-    for ending in endings:
-        if token.endswith(ending) and len(token) - len(ending) >= 4:
-            return token[: -len(ending)]
-    return token
