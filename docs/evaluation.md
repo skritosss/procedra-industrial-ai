@@ -49,7 +49,10 @@ they do not govern the other jobs in the same shop, so they are cited only when
 the request describes welding, cutting or another hot-work operation. The trigger
 reads what the user asked for and not the documents the retrieval layer found:
 enriched context mentions welding on any shop-floor request, and reading it would
-attach a fire-safety requirement to a draft about starting a lathe. The documents used for a given evaluation are
+attach a fire-safety requirement to a draft about starting a lathe. The same
+applies to lifting: the trigger list deliberately omits the bare word «кран»,
+because a valve shop tests шаровые краны all day and crane rules have no
+business in that draft. The documents used for a given evaluation are
 returned with it, and printed on the exported PDF.
 
 | Источник | Область |
@@ -65,6 +68,8 @@ returned with it, and printed on the exported PDF.
 | Приказ Минтруда России от 11.12.2020 № 881н | Подразделения пожарной охраны |
 | Приказ Минтруда России от 11.12.2020 № 884н | Электросварочные и газосварочные работы — по виду работ, а не по отрасли |
 | Постановление Правительства РФ от 16.09.2020 № 1479 | Противопожарный режим: наряд-допуск на огневые работы, очистка зоны, наблюдение после работ |
+| Приказ Ростехнадзора от 26.11.2020 № 461 (ФНП) | Подъёмные сооружения: грузозахватные приспособления, приборы безопасности, зона перемещения груза — по виду работ |
+| Приказ Минтруда России от 28.10.2020 № 753н | Погрузочно-разгрузочные работы и размещение грузов — по виду работ |
 | Постановление Правительства РФ от 24.12.2021 № 2464 | Обучение по охране труда, инструктажи, стажировка — применяется всегда |
 | ГОСТ 3.1105-2011 (ЕСТД) | Вводная часть и технологическая последовательность изложения — применяется всегда |
 | ГОСТ 12.2.003-91 (ССБТ) | Производственное оборудование: органы управления, защитные устройства, аварийная остановка |

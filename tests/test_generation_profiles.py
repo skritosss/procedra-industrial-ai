@@ -137,3 +137,46 @@ def test_the_welding_rules_read_the_request_and_not_the_found_documents() -> Non
     instruction = generate_fallback_instruction(request)
 
     assert not any("дуг" in zone for zone in instruction.hazard_zones)
+
+
+def test_lifting_work_gains_its_own_block() -> None:
+    instruction = generate_fallback_instruction(
+        InstructionRequest(
+            task="Переместить заготовку мостовым краном с применением стропов",
+            industry_profile="manufacturing",
+            instruction_type="general",
+            equipment="Мостовой кран",
+        )
+    )
+
+    assert any("перемещения груза" in zone for zone in instruction.hazard_zones)
+    assert any("строп" in step.action.casefold() for step in instruction.steps)
+    assert any("каск" in item.casefold() for item in instruction.required_ppe)
+
+
+def test_a_ball_valve_is_not_a_lifting_appliance() -> None:
+    """A valve shop tests шаровые краны all day. Matching bare "кран" would put
+    crane rules into a draft that never leaves the bench."""
+    instruction = generate_fallback_instruction(
+        InstructionRequest(
+            task="Провести испытание шарового крана на герметичность перед отгрузкой",
+            industry_profile="manufacturing",
+            instruction_type="inspection",
+            equipment="Шаровой кран DN100",
+        )
+    )
+
+    assert not any("перемещения груза" in zone for zone in instruction.hazard_zones)
+    assert not any("строп" in step.action.casefold() for step in instruction.steps)
+
+
+def test_lifting_rules_are_cited_only_for_lifting_work() -> None:
+    from app.evaluation.regulatory import cited_documents
+
+    lifting = cited_documents("manufacturing", "Перемещение заготовки мостовым краном, строповка")
+    valve = cited_documents("manufacturing", "Испытание шарового крана на герметичность")
+
+    assert any("461" in document for document in lifting)
+    assert any("753н" in document for document in lifting)
+    assert not any("461" in document for document in valve)
+    assert not any("753н" in document for document in valve)

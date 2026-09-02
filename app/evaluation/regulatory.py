@@ -123,6 +123,16 @@ SOURCES: dict[str, RegulatorySource] = {
         "Приказ Минтруда России от 11.12.2020 № 884н",
         "Правила по охране труда при выполнении электросварочных и газосварочных работ",
     ),
+    "753n": RegulatorySource(
+        "753n",
+        "Приказ Минтруда России от 28.10.2020 № 753н",
+        "Правила по охране труда при погрузочно-разгрузочных работах и размещении грузов",
+    ),
+    "fnp_461": RegulatorySource(
+        "fnp_461",
+        "Приказ Ростехнадзора от 26.11.2020 № 461 (ФНП)",
+        "Правила безопасности опасных производственных объектов, на которых используются подъёмные сооружения",
+    ),
     "pp_1479": RegulatorySource(
         "pp_1479",
         "Постановление Правительства РФ от 16.09.2020 № 1479",
@@ -198,6 +208,28 @@ _GENERAL: tuple[RegulatoryRequirement, ...] = (
 
 
 # Subject-level entries. The industry rules are named and in force; the specific
+# Words that mark lifting work. Plain "кран" is deliberately absent: a valve
+# plant tests шаровые краны all day, and pulling crane rules into that draft
+# would be the industry-mismatch bug in a new costume.
+_LIFTING: tuple[str, ...] = (
+    "строп",
+    "грузоподъе",
+    "грузоподъё",
+    "автокран",
+    "мостовой кран",
+    "козловой кран",
+    "кран-балк",
+    "лебедк",
+    "лебёдк",
+    "таль",
+    "подъемник",
+    "подъёмник",
+    "подъемное сооружение",
+    "подъёмное сооружение",
+    "погрузочно-разгрузоч",
+)
+
+
 # paragraph was not verified against the official text, so none is claimed.
 _BY_PROFILE: tuple[RegulatoryRequirement, ...] = (
     RegulatoryRequirement(
@@ -267,6 +299,22 @@ _BY_PROFILE: tuple[RegulatoryRequirement, ...] = (
         ("наряд-допуск", "огнетушит", "горюч", "пожарн", "наблюдающ"),
         profiles=("manufacturing", "construction"),
         triggers=("сварк", "сварочн", "сварщик", "огневы", "газорезк", "наплавк"),
+    ),
+    RegulatoryRequirement(
+        "fnp_461",
+        "учтены грузозахватные приспособления, приборы безопасности и зона перемещения груза",
+        "не учтены грузозахватные приспособления, приборы безопасности или зона перемещения груза",
+        ("строп", "грузозахват", "ограничител", "устойчив"),
+        profiles=("manufacturing", "construction"),
+        triggers=_LIFTING,
+    ),
+    RegulatoryRequirement(
+        "753n",
+        "учтены масса груза, состояние площадки и порядок перемещения",
+        "не учтены масса груза, состояние площадки или порядок перемещения",
+        ("масса груза", "площадк", "перемещени"),
+        profiles=("manufacturing", "construction"),
+        triggers=_LIFTING,
     ),
     RegulatoryRequirement(
         "881n",
