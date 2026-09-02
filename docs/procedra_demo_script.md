@@ -1,241 +1,328 @@
 # Procedra demo script
 
-Status: public-safe demo script for portfolio, GitHub, LinkedIn, SSRN companion materials, and controlled partner conversations.
+Status: public-safe recording script. Procedra is presented as a controlled local
+demo and a research-informed software artifact. Nothing here claims production
+deployment, certified compliance, customer validation, paid pilots, revenue,
+measured productivity gains, or a replacement for qualified expert review.
 
-This script presents Procedra as a controlled local-demo prototype and research-informed software artifact. It does not claim production deployment, certified compliance, customer validation, paid pilots, revenue, measured productivity gains, or replacement of qualified expert review.
+The narration is Russian. The audience is a mid-size Russian machine-building or
+metalworking plant, and the first ten seconds decide whether the rest is heard.
 
-## Before recording or presenting
+Two cuts come out of one recording session:
 
-Run the local checks:
+| Cut | Length | Where it goes | What it has to do |
+|---|---|---|---|
+| Short | ~100 s | First paragraph of a cold letter | Get the letter read |
+| Full | ~7 min | Sent after a reply | Replace the first call |
+
+The short cut is not an abridged version of the long one. It has its own
+voiceover and its own pace, and it is recorded separately.
+
+## Before recording
 
 ```bash
 make smoke
-make end-to-end
-make demo-eval
-make partner-demo-pack
+python scripts/seed_demo_data.py   # with the app already running
+make run
 ```
 
-Last verified 2026-08-02: smoke green with 423 tests, end-to-end 65/65 with no
-failures under load, demo-eval 15/15 with an average structure score of 81,
-partner pack built with 19 artifacts.
+Verified 2026-09-02: 459 tests, ruff, mypy, static-asset smoke, both public-scope
+audits green; `make demo-eval` 15/15 with an average structure score of 94.2;
+`make quality-discrimination` 45 mutations, 0 undetected, 1 blind check of 80.
 
-Start the application with `make run`. Since the deployment mode now defaults to
-production, a bare `uvicorn app.main:app` refuses to start without configuration —
-that is deliberate, and `make run` supplies the demo settings.
+Seeding matters. A recording that opens on empty lists spends its first minute
+proving the product works at all. `seed_demo_data.py` leaves three saved
+instructions across profiles, one already in expert review, an execution run, and
+an uploaded reference document — the state of someone in their second week.
 
-One thing to know while clicking: every `/api/` call counts against a ceiling of
-300 requests per minute per client. Normal demo pace is nowhere near it, but a
-long automated click-through can hit it.
+Interface language RU. Light theme. Browser zoom 125-150 %: half the audience
+opens the link on a phone. Close other tabs, mail, and messengers. Never on
+screen: `.env`, logs, `reports/`, runtime databases, private handoff files,
+uploaded personal documents, a terminal showing the machine name.
 
-**Video is deliberately not in this walkthrough.** Queued video work needs a
-separate worker process, and frame-level analysis needs a configured model;
-without one the pipeline returns fallback records rather than analysis. The
-feature is implemented and covered for queueing, status and cancellation, but no
-video has been processed end to end recently, so it is not demonstrated. Showing
-an unverified feature is how a demo turns into a correction later. If asked, say
-it exists, say it is not part of this recording, and move on.
+**Video ingest is not demonstrated.** Queued video needs a separate worker and a
+configured model, and no clip has been processed end to end recently. If asked:
+the feature exists, it is not part of this recording, move on.
 
-To avoid opening on empty lists, fill the instance first:
+Read at roughly 135 words per minute. Faster reads as a sales pitch, and this
+audience hears a sales pitch as a reason to stop listening.
 
-```bash
-python scripts/seed_demo_data.py
-```
+## Screens verified 2026-09-02
 
-It signs in as a demo administrator, uploads one reference document and saves
-three instructions across different profiles, then takes the first one through
-expert review and records an execution run — the state a real user would have
-after a week rather than after a fresh install. Everything it writes is
-synthetic. Re-running adds a version rather than a duplicate.
+Every screen below was generated and read in a browser against the scenario in
+this script, not assumed:
 
-Use only synthetic, public, or explicitly approved non-confidential materials. Do not show `.env`, `.env.local`, raw logs, runtime databases, uploaded private documents, private handoff files, customer materials, or local audit notes.
-
-## Six-and-a-half-minute walkthrough
-
-### 0:00-0:40 - Problem and boundary
-
-Say:
-
-> Procedra explores a practical industrial AI workflow: turning an operational task, technical context, approved documents, public references, and optional video context into a structured instruction draft. The point is not autonomous approval. The point is to create a review-ready draft with source context, local verification items, expert-review questions, version history, execution evidence, and audit traceability.
-
-Show:
-
-- README or the running web UI.
-- Release status: controlled local demo / partner walkthrough prototype.
-
-Do not say:
-
-- production-ready;
-- validated safety system;
-- deployed at a customer;
-- measured time savings.
-
-### 0:40-1:30 - Input task
-
-Use a stable manufacturing scenario:
-
-```text
-Подготовить рабочее место оператора перед запуском оборудования.
-Участок: кузнечно-прессовый участок.
-Оборудование: производственное оборудование участка.
-Контекст: перед запуском проверить инструмент, ограждения, аварийную кнопку, чистоту зоны и готовность средств защиты.
-```
-
-Show:
-
-- task fields;
-- industry profile;
-- technical context;
-- source settings if visible.
-
-Say:
-
-> I intentionally use a narrow scenario. For real use, exact settings, permits, tolerances, responsible roles, and local rules must come from approved customer materials and expert review.
-
-### 1:30-2:30 - Generated instruction
-
-Show:
-
-- generated instruction title and sections;
-- PPE, hazards, prerequisites, steps, verification, control points, emergencies, mistakes, and workflow blockers.
-
-Say:
-
-> The useful part is not just text generation. The result is structured, validated, and easier to review than a free-form chat answer.
-
-### 2:30-3:20 - Source context and uncertainty
-
-Show:
-
-- source tab;
-- public/local source metadata;
-- local verification items;
-- expert-review questions.
-
-Say:
-
-> Procedra treats retrieved context as support for review, not as automatic factual validation. The system should surface what needs local confirmation instead of inventing missing industrial details.
-
-### 3:20-4:00 - Structure score and export
-
-Show:
-
-- the structure score and its verdict text;
-- recommendations or criterion-level scores;
+- passport, approval roles, approval blockers (6 entries), next actions;
+- PPE, responsibility matrix, observed facts, claim provenance (8 claims, every
+  one `unverified`), local verification list (9), expert-review questions (9);
+- tools, safety requirements (9), hazard zones (3), prerequisites (6);
+- five steps, each with expected result, verification method, common mistakes,
+  and a safety note;
+- acceptance criteria, control points (13), quality checklist (7), emergency
+  actions (6), common mistakes (5), implementation limits;
+- the checks tab: structure score 94, risk level, the wording that separates
+  structure from correctness, and `Сверено с документами` listing seven
+  documents;
 - Markdown, JSON, and PDF export.
 
-Say:
+Verification found and removed one defect on the way: the expert-review list
+opened with «Большая часть шагов не связана с задачей …» on a draft that was
+entirely on topic — a false positive from word overlap over a hand-written
+stemmer that does not survive Russian cases. Every block listed above is safe to
+film as it stands.
 
-> This number measures the shape of the document — whether the required sections
-> exist, whether they are filled with something substantive, whether declared
-> hazards are addressed somewhere. It does not say the instruction is correct for
-> this machine. A draft can be structurally complete and operationally wrong, and
-> the wording on screen says "структура" rather than "качество" for that reason.
+## Full cut, 7 minutes
 
-Do not say:
+### 0:00-0:30 — The problem, not the product
 
-- "the instruction scored 95 out of 100" without the sentence above;
-- "quality score";
-- that the number reflects safety.
+Screen: the empty application, cursor still.
 
-If asked how the criteria were validated, the honest answer is that they are
-checked by a mutation harness (`make quality-discrimination`) which reports how
-many checks never fail — currently a majority. There is no expert-labelled
-benchmark behind the number.
+> Инструкцию по эксплуатации или по охране труда на участке пишет технолог. На
+> один документ уходит от нескольких дней до недели: собрать требования, свести
+> с правилами, оформить по структуре, согласовать. Поменялось оборудование или
+> вышла новая редакция правил — цикл повторяется. При проверке выясняется, что в
+> половине документов не хватает обязательных разделов, и это не халатность, а
+> объём.
+>
+> Procedra не заменяет технолога. Она снимает с него черновик.
 
-### 4:00-5:00 - Version history and review workflow
+### 0:30-1:20 — The input
 
-Show:
+Screen: fill the fields one at a time, unhurried.
 
-- save version;
-- reviewer decision;
-- role-aware workflow state;
-- audit or history view if available.
+```text
+Задача: Подготовить рабочее место оператора перед запуском кривошипного
+        горячештамповочного пресса
+Название операции: Подготовка пресса к запуску
+Участок: Кузнечно-прессовый участок
+Оборудование: Кривошипный горячештамповочный пресс
+Профиль: Производство
+Тип: Подготовка рабочего места
+Контекст: Перед запуском проверить защитные ограждения, аварийную кнопку,
+исправность инструмента, чистоту рабочей зоны и наличие средств защиты.
+```
 
-Say:
+> Ввод — это то, что технолог и так держит в голове: задача, участок,
+> оборудование, отрасль и короткий контекст. Отдельно можно приложить
+> утверждённые документы предприятия — стандарты, регламенты, паспорта
+> оборудования, — и система будет опираться на них, а не на общие сведения из
+> интернета.
+>
+> Сценарий здесь намеренно узкий. Точные режимы, допуски, наряды-допуски и
+> распределение ответственности берутся из документов предприятия и проходят
+> проверку специалистом. Система их не выдумывает — и дальше я покажу, как
+> именно она отказывается это делать.
 
-> The product is designed around accountability: who reviewed what, what changed, and what evidence exists around a draft.
+Press generate. The result appears almost at once; do not remark on the speed, it
+pulls attention away from what matters.
 
-### 5:00-5:50 - Operator checklist and execution evidence
+### 1:20-2:20 — The draft
 
-Show:
+Screen: slow scroll. Rest on СИЗ, Опасные зоны, Порядок выполнения, Контрольные
+точки, Типовые ошибки, Действия при нештатной ситуации.
 
-- operator checklist;
-- checked steps;
-- execution notes;
-- saved execution run.
+> Это не текст в чате. Это документ со структурой: назначение, средства защиты,
+> опасные зоны, предварительные условия, порядок выполнения, проверка,
+> контрольные точки, типовые ошибки, действия при нештатной ситуации.
+>
+> Обратите внимание на два раздела, которых в обычной генерации не бывает.
+> Контрольные точки — что именно проверить и по какому признаку понять, что шаг
+> выполнен правильно. Типовые ошибки — то, на чём чаще всего ошибается новый
+> оператор.
+>
+> Ценность не в том, что текст сгенерирован. Ценность в том, что его можно
+> проверять по частям. Технолог не перечитывает документ целиком — он смотрит
+> раздел за разделом и правит те, где ошиблись.
 
-Say:
+### 2:20-3:10 — What the checks rest on
 
-> This is trial execution evidence for a controlled demo. It is not proof that the instruction is approved for real production use.
+Screen: the checks tab, the `Сверено с документами` line with its list.
 
-### 5:50-6:30 - What the system refused to assert
+> Проверка структуры опирается не на представления разработчика о том, как
+> должна выглядеть инструкция. Обязательные разделы сверяются с приказом
+> Минтруда России номер 772н от 29 октября 2021 года — это документ, который
+> устанавливает требования к содержанию инструкций по охране труда.
+>
+> Для производственного профиля к нему добавляются правила по охране труда при
+> размещении, монтаже, обслуживании и ремонте технологического оборудования,
+> правила при работе с инструментом и приспособлениями, ГОСТ по безопасности
+> производственного оборудования и производственных процессов, ГОСТ по
+> оформлению технологической документации и порядок обучения по охране труда.
+>
+> Отдельно скажу то, что обычно не говорят. ГОСТ 12.0.004 по организации
+> обучения система сознательно не использует: его действие приостановлено до
+> сентября 2026 года. Сослаться на него было бы легко и выглядело бы солиднее.
+> Это была бы ошибка, и она всплыла бы у вас на проверке, а не у нас.
 
-This is the section to spend time on. It is the part of the product that is
-finished, tested, and hard to copy.
+This is the block after which a safety engineer starts listening differently. Do
+not shorten it.
 
-Show:
+### 3:10-3:50 — The structure score
 
-- the evidence claims list, every entry marked `unverified`;
-- provenance types side by side: `user_claim` against `retrieved_unverified`;
-- the local-verification list and the expert-review questions;
-- approval blockers on the workflow.
+Screen: the score, then the expanded criteria list.
 
-Say:
+> Балл структуры. Двенадцать критериев: полнота, понятность, соответствие
+> входным данным, фокус на задаче, безопасность, логическая последовательность,
+> пригодность для обучения, опора на источники, контроль отраслевых рисков,
+> готовность к внедрению, исполнимость на месте, соответствие обязательной
+> структуре.
+>
+> Здесь важна оговорка, и она написана прямо в интерфейсе. Это балл структуры, а
+> не балл качества. Он говорит, что документ полон и оформлен как положено. Он
+> не говорит, что документ правильный для вашего конкретного пресса. Инструкция
+> может быть структурно безупречной и при этом операционно неверной.
+>
+> Поэтому у непроверенного черновика есть потолок: сто баллов он получить не
+> может в принципе.
 
-> Nothing here can promote itself. A retrieved source cannot mark its own content
-> as confirmed, and neither can the model — promotion requires an authenticated
-> technologist, a reference to the evidence, and its hash, and the decision is
-> appended to a hash-chained audit trail. The default answer of this system to
-> "is this true" is "not verified", and that default is enforced by the schema
-> rather than by a policy someone has to remember.
+Never say "quality score", never quote the number without the caveat, never
+suggest it reflects safety.
 
-If you show one thing from Procedra, show this.
+### 3:50-4:30 — What checked the checks
 
-### 6:30-6:50 - Close with pilot scope
+Screen: a terminal running `make quality-discrimination`, ending on the summary
+line.
 
-Say:
+> Любой продукт с ИИ показывает вам свою оценку качества. Вопрос, который стоит
+> задавать: а чем проверяли саму оценку.
+>
+> У нас для этого есть стенд. Он берёт правильную инструкцию и намеренно портит
+> её сорока пятью способами: убирает средства защиты, ломает порядок шагов,
+> вычищает упоминания опасностей, подменяет отрасль в запросе. И смотрит,
+> заметит ли оценка каждое повреждение.
+>
+> Сейчас незамеченных повреждений — ноль. Одна проверка из восьмидесяти не
+> различает ничего, и она показана в отчёте открыто, а не убрана.
+>
+> Честная граница: это проверка на устойчивость, а не на согласие с экспертом.
+> Размеченного специалистами эталона у нас нет — его можно получить только на
+> пилоте, у вас.
 
-> The next practical step is one narrow pilot: one instruction family, one approved document set, named reviewers, and pre-agreed criteria for what is being evaluated. The pilot should separate what was tested from what was not tested.
+### 4:30-5:10 — What the system refused to assert
 
-Show:
+Screen: `Происхождение и статус утверждений`, one or two rows large, then
+`Что требуется проверить локально` and `Вопросы для экспертной проверки`.
 
-- `docs/procedra_pilot_for_customer.md`;
-- `docs/research/procedra_ssrn_working_paper.pdf` if the audience is research-oriented.
+> Это главное, что есть в продукте, и это единственный экран, на котором я
+> задержусь.
+>
+> Каждое утверждение в документе несёт метку происхождения и статус. Пришло из
+> ваших входных данных, найдено в источнике, сгенерировано — и рядом статус. По
+> умолчанию статус один: не проверено.
+>
+> Источник не может подтвердить сам себя. Модель не может подтвердить сама себя.
+> Чтобы перевести утверждение в подтверждённые, нужен аутентифицированный
+> технолог, ссылка на доказательство и его хеш, и это решение уходит в
+> аудит-цепочку, где запись нельзя изменить задним числом.
+>
+> Отдельным списком — что требуется проверить на месте, и вопросы, на которые
+> должен ответить эксперт. Система не делает вид, что знает то, чего не знает.
 
-## 60-90 second recording
+The provenance rows are a machine format and look technical. Show one or two
+large and move on; do not walk through the fields.
 
-Use this for LinkedIn, GitHub, or a short portfolio clip.
+### 5:10-5:50 — Review and versions
 
-### Shot plan
+Screen: save version, `Блокеры перед утверждением`, a reviewer decision, history.
 
-1. Product opening: show UI and one-sentence problem.
-2. Input: show a narrow manufacturing task.
-3. Result: show structured instruction sections.
-4. Trust layer: show sources, structure score, and the claims marked unverified.
-5. Workflow: show version/reviewer/checklist evidence.
-6. Boundary: close with "review-ready draft, not autonomous approval."
+> Дальше документ живёт по обычному заводскому порядку. Роли — мастер участка,
+> технолог, охрана труда, качество. У версии есть блокеры: пока они не закрыты,
+> утвердить её нельзя.
+>
+> Проверяющий фиксирует решение, оно привязано к конкретной версии и к
+> конкретному человеку. Через полгода на вопрос «кто это утверждал и что именно
+> он видел» есть ответ, а не устная реконструкция.
 
-### Voiceover
+### 5:50-6:30 — Execution and export
 
-> Procedra is a controlled local-demo prototype for human-in-the-loop industrial AI. It turns a task, technical context, documents, and curated public references into a structured instruction draft. What the system adds is discipline: every factual claim carries a provenance type and stays unverified until an authenticated reviewer promotes it with evidence, and every decision lands in a hash-chained audit trail. It is not a production safety system and does not replace approved local procedures or qualified experts. The current goal is to support a narrow pilot conversation: one instruction family, approved non-confidential materials, named reviewers, and clear evaluation criteria.
+Screen: operator checklist, checked steps, a note. Then export PDF and scroll the
+opened file.
+
+> Оператор работает по чек-листу и отмечает шаги. Остаются заметки и запись
+> прогона — что фактически выполнялось, а не что было написано.
+>
+> Выгрузка — PDF, Markdown или JSON. PDF идёт на участок в том виде, в каком его
+> подшивают. JSON — если у вас есть система документооборота и документ должен
+> попасть туда.
+
+### 6:30-7:00 — Close on a pilot
+
+Screen: the title page of the exported PDF.
+
+> Практический следующий шаг — один узкий пилот. Одно семейство инструкций,
+> утверждённый комплект документов, названные проверяющие и заранее
+> согласованные критерии: что мы считаем результатом, а что не проверяли.
+>
+> И то, о чём спросит служба безопасности. Модель может стоять внутри вашего
+> контура — на вашем сервере, без выхода наружу. Это не обещание в презентации:
+> запрет на внешние вызовы включается настройкой и проверяется в трёх слоях, а
+> если конфигурация нарушена, система откажется работать по модели, а не тихо
+> отправит данные наружу.
+>
+> Готов обсудить, с какого семейства инструкций начинать.
+
+## Short cut, ~100 seconds
+
+Screen only, no face. Separate voiceover — this does not cut down from the long
+version.
+
+**0:00-0:12** — the form being filled.
+
+> Инструкция по охране труда на участок пишется днями. Procedra делает черновик,
+> который остаётся проверить.
+
+**0:12-0:35** — scrolling the finished document.
+
+> Не текст в чате, а документ со структурой: средства защиты, опасные зоны,
+> порядок выполнения, контрольные точки, типовые ошибки, действия при нештатной
+> ситуации.
+
+**0:35-0:52** — the `Сверено с документами` block.
+
+> Обязательные разделы сверяются с приказом Минтруда 772н и отраслевыми
+> правилами по охране труда. Не с представлениями разработчика о том, как это
+> должно выглядеть.
+
+**0:52-1:20** — the provenance section.
+
+> Каждое утверждение помечено: откуда пришло и проверено ли оно. По умолчанию —
+> не проверено. Ни источник, ни модель не могут подтвердить сами себя: для этого
+> нужен технолог, ссылка на доказательство и запись в аудит-цепочке.
+
+**1:20-1:40** — PDF export, the finished document.
+
+> Черновик для проверки, а не автоматическое утверждение. Работает внутри
+> контура предприятия, без выхода данных наружу.
+
+## Never say
+
+Production-ready. Validated safety system. Deployed at a customer. Complies with
+GOST — the system *checks against* documents, a person establishes compliance.
+Saves N hours — no measured figure exists. Any customer, pilot, or percentage
+that does not exist.
+
+Asked about deployments, the answer is that there have been no pilots yet and one
+is being sought. That answer is fine. An attempt to talk around it is audible.
 
 ## Demo evidence checklist
 
-Before sharing a clip or meeting recording, confirm:
+Before sharing a clip or a meeting recording, confirm:
 
-- no secrets, tokens, `.env` values, runtime paths, private logs, or customer-sensitive materials are visible;
-- no raw `reports/`, generated databases, uploads, private handoff files, or local audit notes are shown;
-- screenshots and video frames are synthetic, public, or explicitly approved;
-- no unsupported claims are made about production readiness, compliance, customer deployment, paid pilots, revenue, or quantified impact;
-- the demo states that human review is required before any real-world operational use.
+- no secrets, tokens, `.env` values, runtime paths, private logs, or
+  customer-sensitive material is visible;
+- no `reports/`, generated databases, uploads, private handoff files, or local
+  audit notes are on screen;
+- every frame is synthetic, public, or explicitly approved;
+- no claim is made about production readiness, compliance, customer deployment,
+  paid pilots, revenue, or quantified impact;
+- the recording states that human review is required before any operational use.
 
 ## Follow-up questions
-
-Use these after the demo:
 
 - Which instruction family is painful enough to test first?
 - Which approved documents can be used safely?
 - Who must review a draft before any operational use?
-- What does a useful pilot output look like: PDF, Markdown, JSON, source list, expert questions, run summary, or all of these?
+- What does a useful pilot output look like: PDF, Markdown, JSON, source list,
+  expert questions, run summary, or all of these?
 - Which metric should be measured if the pilot moves beyond a walkthrough?
 - What data must stay out of the pilot environment?
