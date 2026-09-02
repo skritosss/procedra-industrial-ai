@@ -536,3 +536,45 @@ def test_an_operator_with_an_env_file_is_not_told_to_copy_a_template(monkeypatch
     with pytest.raises(ValidationError) as raised:
         Settings(_env_file=None, deployment_mode="production")
     assert "cp .env.example .env" not in str(raised.value)
+
+
+def test_control_characters_do_not_reach_the_document() -> None:
+    """They arrive only through the API, never the form, and travel from the
+    request into the instruction, the Markdown and the PDF. Nothing inside this
+    service breaks on them; an XML-based document system downstream does."""
+    from app.generation.pipeline import generate_instruction
+    from app.generation.pdf import render_instruction_pdf
+    from app.schemas.instruction import InstructionRequest
+
+    response = generate_instruction(
+        InstructionRequest(
+            task="Подготовка\x00\x07 рабочего места оператора",
+            industry_profile="manufacturing",
+            instruction_type="general",
+        )
+    )
+
+    assert "\x00" not in response.instruction.title
+    assert "\x00" not in response.markdown
+
+    # The raw bytes always contain NUL — fonts and cross-reference tables are
+    # binary. What matters is the text a reader and an exporter get out.
+    import io
+
+    from pypdf import PdfReader
+
+    pages = PdfReader(io.BytesIO(render_instruction_pdf(response))).pages
+    assert "\x00" not in "\n".join(page.extract_text() or "" for page in pages)
+
+
+def test_line_breaks_and_tabs_survive() -> None:
+    """A technical context is pasted from a document; its line breaks carry
+    meaning and stripping them would lose the structure the author typed."""
+    from app.schemas.instruction import InstructionRequest
+
+    request = InstructionRequest(
+        task="Подготовка рабочего места оператора",
+        technical_context="Первая строка\nВторая строка\tс отступом",
+    )
+
+    assert request.technical_context == "Первая строка\nВторая строка\tс отступом"

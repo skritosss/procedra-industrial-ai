@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import datetime
 from typing import Literal
 from urllib.parse import urlsplit
@@ -148,6 +149,31 @@ class InstructionWorkflow(BaseModel):
         return _clean_string_list(value)
 
 
+def strip_control_characters(value: str) -> str:
+    """Remove control characters a person cannot have meant to type.
+
+    Line feeds and tabs stay: a technical context is pasted from a document and
+    its line breaks carry meaning. Everything else in category Cc is dropped —
+    a NUL, an escape, a bell. They reach the request only through the API, never
+    through the form, and they travel from there into the instruction, the
+    Markdown and the PDF.
+
+    Inside this service they cause no damage: SQLite returns the string intact,
+    JSON escapes them, the PDF content streams are unaffected and the filename
+    header strips them. The reason to clean them is what happens after export —
+    XML forbids NUL outright, so a document carrying one is rejected by any
+    XML-based document system or .docx pipeline the customer feeds it to.
+
+    Cleaning rather than refusing is deliberate: an integration that sent one
+    stray byte should get a usable document, not a rejected request.
+    """
+    return "".join(
+        character
+        for character in value
+        if character in "\n\t" or unicodedata.category(character) != "Cc"
+    )
+
+
 class InstructionRequest(BaseModel):
     task: str = Field(..., min_length=10, max_length=2000)
     user_level: UserLevel = "new_operator"
@@ -159,6 +185,16 @@ class InstructionRequest(BaseModel):
     technical_context: str | None = Field(default=None, max_length=12000)
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator(
+        "task", "department", "equipment", "operation_name", "technical_context",
+        mode="before",
+    )
+    @classmethod
+    def drop_control_characters(cls, value: object) -> object:
+        # Before the length checks, so a string padded with control characters
+        # is measured by what will actually be stored.
+        return strip_control_characters(value) if isinstance(value, str) else value
 
     @field_validator("department", "equipment", "operation_name", "technical_context")
     @classmethod
