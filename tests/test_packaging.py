@@ -448,3 +448,67 @@ def test_settings_default_to_closed_access() -> None:
     # An unset API token must not authorise anyone by itself.
     assert settings.allow_unauthenticated_access is False
     assert settings.api_access_token is None
+
+
+STAND_ENV_TEMPLATE = PROJECT_ROOT / "deploy" / "stand.env.example"
+
+
+def _template_settings(path: Path, **overrides: object) -> Settings:
+    """Build settings from a template file.
+
+    The values are passed as arguments rather than through `_env_file` because
+    the test session exports a demo environment, and environment variables win
+    over an env file. Arguments win over both, so this reads the template and
+    nothing else.
+    """
+    values: dict[str, object] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        values[key.strip().lower()] = value.strip()
+    values.update(overrides)
+    return Settings(_env_file=None, **values)
+
+
+def test_stand_template_refuses_to_start_until_a_token_is_generated() -> None:
+    # The one field the template deliberately leaves empty. A stand that boots
+    # with a placeholder secret is worse than one that refuses to boot.
+    with pytest.raises(ValidationError, match="API_ACCESS_TOKEN"):
+        _template_settings(STAND_ENV_TEMPLATE)
+
+
+def test_stand_template_is_accepted_once_the_token_is_supplied() -> None:
+    settings = _template_settings(
+        STAND_ENV_TEMPLATE,
+        api_access_token="stand-bootstrap-token-at-least-32-characters",
+    )
+
+    assert settings.deployment_mode == "production"
+    assert settings.allow_unauthenticated_access is False
+    assert settings.auth_public_registration_enabled is False
+    assert settings.auth_allow_role_self_assignment is False
+    assert settings.metrics_public_enabled is False
+    assert settings.rate_limit_enabled is True
+    # Switched off rather than allowlisted: the stand has no reason to reach out
+    # for content, and an empty allowlist would mean "any public host".
+    assert settings.video_url_ingest_enabled is False
+    assert settings.video_allowed_hosts == ()
+    # Compose publishes the port on this address; loopback keeps the container
+    # behind the TLS proxy instead of on the host's public interface.
+    assert "APP_BIND_HOST=127.0.0.1" in STAND_ENV_TEMPLATE.read_text(encoding="utf-8")
+
+
+def test_stand_template_is_stricter_than_the_local_template() -> None:
+    local = _template_settings(PROJECT_ROOT / ".env.example")
+    stand = _template_settings(
+        STAND_ENV_TEMPLATE,
+        api_access_token="stand-bootstrap-token-at-least-32-characters",
+    )
+
+    assert stand.auth_min_password_length > local.auth_min_password_length
+    assert stand.auth_session_idle_timeout_seconds < local.auth_session_idle_timeout_seconds
+    assert stand.auth_max_failed_attempts < local.auth_max_failed_attempts
+    assert stand.rate_limit_requests < local.rate_limit_requests
+    assert stand.auth_rate_limit_requests < local.auth_rate_limit_requests

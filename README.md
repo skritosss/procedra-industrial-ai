@@ -217,7 +217,7 @@ make demo-eval
 make partner-demo-pack
 ```
 
-The latest local verification on 2026-08-02 recorded 406 passing tests (no
+The latest local verification on 2026-09-02 recorded 459 passing tests (no
 skips) plus Ruff, mypy, compileall, dependency integrity, Compose/API smoke,
 safety evaluation, and the criterion discrimination gate. Detailed local audit
 artifacts are kept in the non-published `reports/` workspace folder; demo

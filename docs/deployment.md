@@ -114,6 +114,44 @@ Compose also enables:
   because the worker does not serve HTTP; container state, restart count, and
   persisted lease/heartbeat/job progress are its honest liveness signals.
 
+## Public demo stand
+
+A stand reachable from the internet runs in `production` mode, not `demo`. Demo
+mode describes a laptop: cookies without `Secure`, public registration, role
+self-assignment, and an optional public metrics dashboard. Each of those is a
+defect on a public host, so the stand takes the same hardening as a customer
+installation and differs from it only in content and in the model endpoint.
+
+`deploy/stand.env.example` is the template. Copy it to `.env` on the stand host
+and generate the one value it deliberately leaves empty:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+The service refuses to start until `API_ACCESS_TOKEN` is filled, which is the
+intended behaviour rather than an inconvenience.
+
+What the template settles:
+
+- registration is closed and roles are not self-assigned; prospects receive an
+  invitation each, which costs one manual step and buys an attributable session
+  and no anonymous spend on the model;
+- request, authentication, and lockout limits are tighter than the local
+  defaults, because a stand is exposed and generation is the expensive path;
+- `VIDEO_URL_INGEST_ENABLED=false` removes the only outbound path besides the
+  model call. Prospects upload a file instead, and no host allowlist is needed;
+- the container is published on `127.0.0.1` and TLS is terminated by a reverse
+  proxy in front, which is what makes the `Secure` cookie flag meaningful;
+- `OPENAI_ENABLED=false` by default, so the stand demonstrates the deterministic
+  path without a key. Set `LLM_BASE_URL` to any OpenAI-compatible endpoint to
+  show the model path — including a customer's own model rather than a foreign
+  vendor's.
+
+`tests/test_packaging.py` loads this template and asserts both that it is
+refused without a token and that every access control in it stays closed, so the
+file cannot drift away from what the settings validator requires.
+
 ## Production Smoke Checklist — local configuration gate only
 
 Run these checks before recording a demo or presenting the project:
