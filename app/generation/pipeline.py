@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app.core.settings import get_settings
 from app.providers.base import TextProvider
 from app.providers.errors import ProviderEgressBlockedError, ProviderError
-from app.providers.perimeter import report_blocked
+from app.providers.perimeter import report_blocked, report_degraded
 from app.providers.registry import text_provider
 from app.evaluation.quality import evaluate_instruction
 from app.evaluation.safety import enforce_provenance_and_safety, link_evidence_claims_to_sources
@@ -108,7 +108,11 @@ def generate_instruction(request: InstructionRequest) -> InstructionResponse:
 
     try:
         instruction = _generate_with_model(request=request, provider=provider)
-    except (ProviderError, JSONDecodeError, ValidationError, ValueError):
+    except (ProviderError, JSONDecodeError, ValidationError, ValueError) as error:
+        # The response is the same one a deployment without a model gets, down to
+        # the `deterministic` mode the interface shows. Only this line separates
+        # "no model configured" from "the configured model is failing".
+        report_degraded(error, "text")
         return _fallback_response(request)
     instruction = enforce_provenance_and_safety(
         focus_instruction_on_request(improve_instruction_quality(instruction, request), request),

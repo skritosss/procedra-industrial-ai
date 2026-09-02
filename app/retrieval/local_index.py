@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.core.settings import get_settings
 from app.providers.errors import ProviderEgressBlockedError, ProviderError, ProviderNotConfiguredError
-from app.providers.perimeter import report_blocked
+from app.providers.perimeter import report_blocked, report_degraded
 from app.providers.registry import embedding_provider
 from app.retrieval.public_sources import retrieve_public_sources
 from app.schemas.instruction import ContextGenerationRequest, RetrievedSource
@@ -318,8 +318,12 @@ def _embedding_bundle(
             # Caught ahead of ProviderError so the refusal is recorded rather
             # than absorbed as an ordinary embedding failure.
             report_blocked(error, "embedding")
-        except (ProviderError, ValueError, IndexError, AttributeError):
-            pass
+        except (ProviderError, ValueError, IndexError) as error:
+            # AttributeError used to be caught here too. It is not a provider
+            # fault but a mistake in this code — a renamed field, a None where an
+            # object was expected — and swallowing it turned a bug into quietly
+            # worse retrieval. It now propagates.
+            report_degraded(error, "embedding")
     return (
         _local_embedding(query),
         {_chunk_key(chunk): chunk.local_embedding for chunk in chunks},

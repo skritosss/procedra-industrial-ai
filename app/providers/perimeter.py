@@ -21,6 +21,21 @@ DEFAULT_PORTS = {"http": 80, "https": 443}
 PERIMETER_LOGGER = logging.getLogger("industrial_ai.perimeter")
 
 
+def report_degraded(error: Exception, capability: str) -> None:
+    """Record that a model call failed and the deterministic path took over.
+
+    Sibling of `report_blocked`, and it exists for the same reason: without a
+    line here, a wrong key, an unreachable endpoint, a rate limit and a malformed
+    response are all indistinguishable from a deployment that was never given a
+    model. The service keeps answering either way, so nothing else in the system
+    marks the difference.
+    """
+    PERIMETER_LOGGER.warning(
+        "model call failed, answering deterministically",
+        extra={"capability": capability, "reason": f"{type(error).__name__}: {error}"},
+    )
+
+
 def report_blocked(error: ProviderEgressBlockedError, capability: str) -> None:
     """Record a refusal so it cannot pass as an ordinary model outage.
 
