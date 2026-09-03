@@ -125,3 +125,79 @@ def test_safe_prohibition_and_distinct_component_states_do_not_raise_false_hazar
     evaluation = evaluate_instruction(instruction, request)
 
     assert not evaluation.safety_findings
+
+
+def test_the_ceiling_scales_the_score_and_does_not_flatten_it() -> None:
+    """Two properties, and the second is the one that was lost once already.
+
+    Clipping at the ceiling was the first implementation. Every scenario then
+    scored exactly 95, which removed the only thing the number is for — telling
+    one draft from another — while still looking like a working evaluation.
+    """
+    from app.evaluation.quality import UNVERIFIED_DRAFT_CEILING, _unverified_draft_ceiling
+
+    instruction = generate_fallback_instruction(
+        InstructionRequest(task="Подготовить рабочее место оператора перед запуском пресса")
+    )
+    assert all(claim.validation_record is None for claim in instruction.evidence_claims)
+
+    capped = [_unverified_draft_ceiling(instruction, raw) for raw in (100, 96, 92, 80)]
+
+    # The top of the scale stays out of reach while nothing is confirmed.
+    assert capped[0] <= UNVERIFIED_DRAFT_CEILING
+    # Ordering survives: drafts that differed before must still differ.
+    assert len(set(capped)) == len(capped)
+    assert capped == sorted(capped, reverse=True)
+
+
+def test_a_confirmed_claim_lifts_the_ceiling() -> None:
+    """The ceiling marks the difference between complete and confirmed, so a
+    reviewer taking responsibility for part of the content has to remove it."""
+    from datetime import datetime, timezone
+
+    from app.evaluation.quality import _unverified_draft_ceiling
+    from app.schemas.instruction import ClaimValidationRecord
+
+    instruction = generate_fallback_instruction(
+        InstructionRequest(task="Подготовить рабочее место оператора перед запуском пресса")
+    )
+    claim = instruction.evidence_claims[0]
+    assert claim.claim_id
+    claim.validation_record = ClaimValidationRecord(
+        validation_id="validation-0000000001",
+        claim_id=claim.claim_id,
+        evidence_reference="Технологическая карта 12-45",
+        evidence_sha256="a" * 64,
+        reviewer_user_id="user-1",
+        reviewer_name="Иванов И.И.",
+        reviewer_role="technologist",
+        comment="Сверено с технологической картой участка.",
+        validated_at=datetime.now(timezone.utc),
+    )
+
+    assert _unverified_draft_ceiling(instruction, 100) == 100
+
+
+def test_a_partly_satisfied_check_is_reported_as_a_problem_not_a_strength() -> None:
+    """The threshold decides what the reader is told, not what the number is:
+    the score is the mean of the values either way. Lowered, it moves a check
+    that most steps fail into the list of things the document does well.
+    """
+    from app.evaluation.quality import _criterion
+
+    result = _criterion("completeness", {"шаги связаны с задачей": 0.6})
+
+    assert result.strengths == []
+    assert result.issues == ["шаги связаны с задачей (выполнено на 60%)"]
+    # The number is unchanged by the classification, which is why a broken
+    # threshold is invisible to any test that only looks at scores.
+    assert result.score == 60
+
+
+def test_a_nearly_satisfied_check_still_counts_as_a_problem() -> None:
+    """The boundary itself: 0.94 must not pass. A check that is almost met is
+    the case the threshold exists for."""
+    from app.evaluation.quality import _criterion
+
+    assert _criterion("completeness", {"проверка": 0.94}).issues
+    assert _criterion("completeness", {"проверка": 1.0}).strengths == ["проверка"]
