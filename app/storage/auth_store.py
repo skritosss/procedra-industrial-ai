@@ -132,6 +132,21 @@ def _register_failed_login(
     settings: Settings,
     database_path: Path | None,
 ) -> None:
+    if _lockout_is_active(row, now):
+        # A failed attempt during an active lockout must change nothing.
+        #
+        # Recomputing the counter here cleared the lockout the previous attempt
+        # had just set: attempt N locked the account and reset the counter to
+        # zero, attempt N+1 saw a counter below the threshold and wrote
+        # locked_until = NULL. Anyone who kept guessing was therefore never
+        # locked out at all, and the control only delayed an attacker who
+        # stopped on their own.
+        #
+        # Extending the window on each attempt would be the other obvious fix
+        # and is worse: a stranger who knows an address could keep an employee
+        # locked out indefinitely, which is the reason the lockout is temporary
+        # in the first place.
+        return
     attempts = int(row["failed_login_attempts"] or 0) + 1
     locked_until: str | None = None
     if attempts >= settings.auth_max_failed_attempts:

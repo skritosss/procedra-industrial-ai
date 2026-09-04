@@ -1,5 +1,6 @@
 import hashlib
 import sqlite3
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
@@ -868,3 +869,85 @@ def test_locked_account_is_indistinguishable_from_a_missing_one(tmp_path, monkey
     # for either would make the two tellable apart by response time.
     assert locked is None and missing is None
     assert len(calls) == 2
+
+
+def test_a_lockout_survives_further_guessing(tmp_path, monkeypatch) -> None:
+    """The control has to stop an attacker who keeps going.
+
+    It used to do the opposite: attempt N locked the account and reset the
+    counter, attempt N+1 saw a counter below the threshold and wrote
+    locked_until = NULL. Anyone who did not stop was never locked out.
+    """
+    database_path = tmp_path / "lockout.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "auth_max_failed_attempts": 3,
+            "auth_lockout_seconds": 900,
+        }
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    create_user("guess@example.com", "Guess Target", "correct-password-1", database_path=database_path)
+
+    for _ in range(3):
+        assert authenticate_user("guess@example.com", "wrong", database_path=database_path) is None
+    assert authenticate_user("guess@example.com", "correct-password-1", database_path=database_path) is None
+
+    # Five more guesses while the lockout is running must not lift it.
+    for _ in range(5):
+        assert authenticate_user("guess@example.com", "wrong", database_path=database_path) is None
+    assert authenticate_user("guess@example.com", "correct-password-1", database_path=database_path) is None
+
+
+def test_a_lockout_does_not_grow_with_every_further_guess(tmp_path, monkeypatch) -> None:
+    """The window stays where it was set. Extending it on each attempt would let
+    anyone who knows an address keep an employee locked out for good."""
+    import sqlite3
+
+    database_path = tmp_path / "lockout-window.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "auth_max_failed_attempts": 2,
+            "auth_lockout_seconds": 900,
+        }
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    create_user("window@example.com", "Window Target", "correct-password-1", database_path=database_path)
+
+    def locked_until() -> str:
+        with sqlite3.connect(database_path) as connection:
+            row = connection.execute(
+                "SELECT locked_until FROM users WHERE email = ?", ("window@example.com",)
+            ).fetchone()
+        return str(row[0])
+
+    for _ in range(2):
+        authenticate_user("window@example.com", "wrong", database_path=database_path)
+    first = locked_until()
+    assert first and first != "None"
+
+    for _ in range(3):
+        authenticate_user("window@example.com", "wrong", database_path=database_path)
+    assert locked_until() == first
+
+
+def test_a_lockout_ends_when_its_window_passes(tmp_path, monkeypatch) -> None:
+    """Temporary on purpose: a permanent lockout is a way to disable a colleague."""
+    database_path = tmp_path / "lockout-expiry.sqlite3"
+    settings = get_settings().model_copy(
+        update={
+            "database_path": database_path,
+            "auth_max_failed_attempts": 2,
+            "auth_lockout_seconds": 1,
+        }
+    )
+    monkeypatch.setattr("app.storage.auth_store.get_settings", lambda: settings)
+    create_user("expiry@example.com", "Expiry Target", "correct-password-1", database_path=database_path)
+
+    for _ in range(2):
+        authenticate_user("expiry@example.com", "wrong", database_path=database_path)
+    assert authenticate_user("expiry@example.com", "correct-password-1", database_path=database_path) is None
+
+    time.sleep(1.2)
+    assert authenticate_user("expiry@example.com", "correct-password-1", database_path=database_path) is not None
