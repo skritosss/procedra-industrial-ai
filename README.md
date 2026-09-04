@@ -322,6 +322,14 @@ Browser login uses HttpOnly cookies and CSRF protection. API clients may use bea
 
 Stored documents, instructions, videos/keyframes, audits, and execution records are scoped by organization and project. See [Authorization](docs/authorization.md).
 
+## Security package for a customer's security team
+
+`docs/security/` holds the material a plant's information-security officer needs
+to decide whether the product may enter their network: a threat model, the data
+flows in and out, answers to a standard questionnaire, and an explicit list of
+what the product does not have and what was not tested. Written in Russian,
+because that is who reads it.
+
 ## Security and production-readiness notes
 
 The repository is suitable for a controlled local demonstration and technical review. It is not presented as production-ready SaaS.
