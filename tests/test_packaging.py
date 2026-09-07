@@ -578,3 +578,25 @@ def test_line_breaks_and_tabs_survive() -> None:
     )
 
     assert request.technical_context == "Первая строка\nВторая строка\tс отступом"
+
+
+def test_a_reviewer_reads_what_is_stored() -> None:
+    """A right-to-left override changes what a browser shows without changing
+    what is saved: the reviewer approves one text and the file holds another.
+    That defeats the single claim the product makes about itself."""
+    from app.generation.pipeline import generate_instruction
+    from app.schemas.instruction import InstructionRequest
+
+    rlo = "‮"
+    zero_width = "​"
+    response = generate_instruction(
+        InstructionRequest(
+            task=f"Подготовка{rlo} рабочего{zero_width} места оператора",
+            industry_profile="manufacturing",
+            instruction_type="general",
+        )
+    )
+
+    assert rlo not in response.instruction.title
+    assert rlo not in response.markdown
+    assert zero_width not in response.markdown

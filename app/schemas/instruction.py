@@ -150,27 +150,37 @@ class InstructionWorkflow(BaseModel):
 
 
 def strip_control_characters(value: str) -> str:
-    """Remove control characters a person cannot have meant to type.
+    """Remove characters a person cannot have meant to type.
+
+    Two Unicode categories go, for two different reasons.
+
+    Category Cc — a NUL, an escape, a bell. They reach the request only through
+    the API, never through the form, and travel into the instruction, the
+    Markdown and the PDF. Inside this service they cause no damage: SQLite
+    returns the string intact, JSON escapes them, the PDF content streams are
+    unaffected and the filename header strips them. The reason to clean them is
+    what happens after export — XML forbids NUL outright, so a document carrying
+    one is rejected by any XML-based document system or .docx pipeline.
+
+    Category Cf — the bidirectional overrides and the zero-width characters.
+    These are worse, because they change what a person reads without changing
+    what is stored. A right-to-left override in a task reaches the title and the
+    steps, and a browser renders the text reordered: the reviewer approves one
+    thing and the file holds another. That defeats the one claim the product
+    makes about itself, that a human checks the draft. No Cf character has a use
+    in a Russian or English instruction; the ones that matter elsewhere join
+    Arabic and Indic letters, which this document set does not contain.
 
     Line feeds and tabs stay: a technical context is pasted from a document and
-    its line breaks carry meaning. Everything else in category Cc is dropped —
-    a NUL, an escape, a bell. They reach the request only through the API, never
-    through the form, and they travel from there into the instruction, the
-    Markdown and the PDF.
-
-    Inside this service they cause no damage: SQLite returns the string intact,
-    JSON escapes them, the PDF content streams are unaffected and the filename
-    header strips them. The reason to clean them is what happens after export —
-    XML forbids NUL outright, so a document carrying one is rejected by any
-    XML-based document system or .docx pipeline the customer feeds it to.
+    its line breaks carry meaning.
 
     Cleaning rather than refusing is deliberate: an integration that sent one
-    stray byte should get a usable document, not a rejected request.
+    stray character should get a usable document, not a rejected request.
     """
     return "".join(
         character
         for character in value
-        if character in "\n\t" or unicodedata.category(character) != "Cc"
+        if character in "\n\t" or unicodedata.category(character) not in ("Cc", "Cf")
     )
 
 
