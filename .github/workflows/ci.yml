@@ -53,6 +53,22 @@ jobs:
           python -m pip install pip-audit==2.10.1
           python -m pip_audit -r requirements.txt
 
+      # The inventory is published as a build artifact rather than committed:
+      # a dependency list stored in the repository is wrong the day a version
+      # moves, and a stale one is worse than none. Failure here does not fail
+      # the build — the audit step above already does that for vulnerabilities.
+      - name: Build dependency inventory
+        continue-on-error: true
+        run: python scripts/build_sbom.py
+
+      - name: Upload dependency inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-inventory
+          path: generated/sbom/
+          if-no-files-found: warn
+
       - name: Run tests
         env:
           OPENAI_ENABLED: "false"

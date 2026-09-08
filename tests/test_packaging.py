@@ -600,3 +600,51 @@ def test_a_reviewer_reads_what_is_stored() -> None:
     assert rlo not in response.instruction.title
     assert rlo not in response.markdown
     assert zero_width not in response.markdown
+
+
+def test_the_inventory_carries_package_urls(tmp_path) -> None:
+    """pip-audit emits name and version but no `purl`, and a security team's
+    tooling matches on `purl`. Without it the inventory reads fine to a person
+    and is close to useless to a scanner."""
+    import json
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "scripts/build_sbom.py", "--output", str(tmp_path)],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    document = json.loads((tmp_path / "sbom.cyclonedx.json").read_text(encoding="utf-8"))
+    components = document["components"]
+
+    assert document["bomFormat"] == "CycloneDX"
+    assert components
+    assert all(component["purl"].startswith("pkg:pypi/") for component in components)
+    # PEP 503: the name in a Package URL is lowercased with runs of -_. collapsed.
+    assert any(component["purl"] == "pkg:pypi/pyyaml@6.0.3" for component in components) or all(
+        component["purl"] == component["purl"].lower() for component in components
+    )
+
+
+def test_the_inventory_states_what_it_does_not_cover(tmp_path) -> None:
+    """A dependency list that quietly omits the operating-system packages of the
+    base image invites a security team to assume they were checked."""
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [sys.executable, "scripts/build_sbom.py", "--output", str(tmp_path)],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report = (tmp_path / "sbom_report.md").read_text(encoding="utf-8")
+
+    assert "Что не покрыто" in report
+    assert "Debian" in report

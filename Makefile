@@ -14,7 +14,7 @@ DEMO_ENV ?= DEPLOYMENT_MODE=demo ALLOW_UNAUTHENTICATED_ACCESS=true
 BACKUP ?=
 SAFETY_BACKUP ?=
 
-.PHONY: venv env install run video-worker video-job-contention test lint typecheck compile pip-check static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination end-to-end demo-eval partner-demo-pack cleanup-plan cleanup-delete db-migrate db-verify db-backup db-restore document-ownership-plan document-ownership-apply smoke api-smoke health ready ready-details metrics docker-build docker-config docker-up docker-down
+.PHONY: venv env install run video-worker video-job-contention test lint typecheck compile pip-check sbom static-smoke public-scope-audit public-content-audit safety-eval quality-discrimination end-to-end demo-eval partner-demo-pack cleanup-plan cleanup-delete db-migrate db-verify db-backup db-restore document-ownership-plan document-ownership-apply smoke api-smoke health ready ready-details metrics docker-build docker-config docker-up docker-down
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -48,6 +48,9 @@ typecheck:
 
 compile:
 	$(APP_PYTHON) -m compileall -q app tests scripts
+
+sbom:
+	$(APP_PYTHON) scripts/build_sbom.py
 
 pip-check:
 	$(APP_PYTHON) -m pip check
