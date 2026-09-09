@@ -436,7 +436,15 @@ def _has_observability_access(request: Request) -> bool:
         return True
     if not request_is_authorized(request):
         return False
-    return bool(settings.api_access_token or getattr(request.state, "current_user", None))
+    # `request_is_authorized` also returns true when anonymous access is allowed,
+    # and it records a transport only where a credential actually validated. The
+    # test used to be "a token is configured", which is not the same as "a token
+    # was presented": a demo instance with ALLOW_UNAUTHENTICATED_ACCESS and an
+    # API_ACCESS_TOKEN set served these endpoints to anyone who could reach it.
+    # Production never runs that combination — it refuses to start — so the hole
+    # was limited to demo instances, which is exactly what gets put on a public
+    # address for a prospect to look at.
+    return getattr(request.state, "auth_transport", None) is not None
 
 
 ROUTE_TEMPLATES = tuple(app.openapi()["paths"]) + (

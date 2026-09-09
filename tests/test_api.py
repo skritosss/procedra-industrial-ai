@@ -1602,3 +1602,39 @@ def test_legacy_keyframe_read_without_session_is_demo_only(tmp_path, monkeypatch
     # frames to anyone who can guess a video id.
     assert demo.status_code == 404
     assert production.status_code == 401
+
+
+def test_observability_needs_a_presented_credential(tmp_path, monkeypatch) -> None:
+    """A configured token is not a presented one.
+
+    The check read `bool(settings.api_access_token)`, so a demo instance with
+    anonymous access enabled and a token set served metrics and readiness
+    details to anyone who could reach it — which is what a public demo is.
+    """
+    from app.core.settings import get_settings
+
+    token = "z" * 40
+    for name, value in {
+        "DEPLOYMENT_MODE": "demo",
+        "ALLOW_UNAUTHENTICATED_ACCESS": "true",
+        "API_ACCESS_TOKEN": token,
+        "DATABASE_PATH": str(tmp_path / "a.db"),
+        "METRICS_DATABASE_PATH": str(tmp_path / "m.db"),
+        "RATE_LIMIT_DATABASE_PATH": str(tmp_path / "r.db"),
+        "RATE_LIMIT_ENABLED": "false",
+    }.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+
+    try:
+        with TestClient(app) as client:
+            for url in ("/metrics", "/ready/details"):
+                assert client.get(url).status_code == 401, url
+                assert client.get(url, headers={"Authorization": f"Bearer {token}"}).status_code == 200, url
+            # The demo's own purpose is unaffected: generation stays open.
+            assert client.post(
+                "/api/instructions/generate-with-context",
+                json={"task": "Подготовка рабочего места оператора", "industry_profile": "manufacturing"},
+            ).status_code == 200
+    finally:
+        get_settings.cache_clear()
