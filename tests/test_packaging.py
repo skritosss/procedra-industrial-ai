@@ -88,7 +88,7 @@ def test_env_example_is_safe_for_deterministic_local_demo() -> None:
 def test_requirements_include_runtime_typecheck_and_testclient_dependencies() -> None:
     requirements = _read("requirements.txt")
 
-    assert "httpx2==2.3.0" in requirements
+    assert "httpx2==2.12.0" in requirements
     assert "reportlab==4.5.1" in requirements
     assert "mypy==1.20.2" in requirements
     assert all(
