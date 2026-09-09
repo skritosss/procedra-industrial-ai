@@ -365,6 +365,7 @@ def _verify_audit_event_chains(connection: sqlite3.Connection) -> None:
         """
     ).fetchall()
     parents: dict[tuple[str, str, int], tuple[int, str]] = {}
+    last_event_json: dict[tuple[str, str, int], str] = {}
     for row in rows:
         parent = (str(row[0]), str(row[1]), int(row[2]))
         sequence = int(row[3])
@@ -376,6 +377,44 @@ def _verify_audit_event_chains(connection: sqlite3.Connection) -> None:
         if not hmac.compare_digest(computed, str(row[5])):
             raise ValueError("Audit event chain hash is invalid")
         parents[parent] = (sequence + 1, computed)
+        last_event_json[parent] = str(row[6])
+    _verify_audit_content_hashes(connection, last_event_json)
+
+
+def _verify_audit_content_hashes(
+    connection: sqlite3.Connection,
+    last_event_json: dict[tuple[str, str, int], str],
+) -> None:
+    """Check the stored instruction against the digest its last event carries.
+
+    The chain above proves the record of decisions was not rewritten. It says
+    nothing about the text those decisions were about, and the versions table
+    has no immutability triggers — a direct edit of `payload_json` used to pass
+    both checks.
+
+    Events written before this existed carry no digest and are skipped: a
+    database from an earlier version must still verify, and the alternative
+    would be to fail every installation on upgrade.
+    """
+    for (organization_id, instruction_id, version), event_json in last_event_json.items():
+        try:
+            recorded = json.loads(event_json).get("metadata", {}).get("content_sha256")
+        except (ValueError, AttributeError):
+            continue
+        if not isinstance(recorded, str) or not recorded:
+            continue
+        row = connection.execute(
+            """
+            SELECT payload_json FROM instruction_versions
+            WHERE organization_id = ? AND instruction_id = ? AND version = ?
+            """,
+            (organization_id, instruction_id, version),
+        ).fetchone()
+        if row is None:
+            continue
+        actual = hashlib.sha256(str(row[0]).encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(actual, recorded):
+            raise ValueError("Instruction version content does not match its audit trail")
 
 
 def _verify_admin_audit_event_chains(connection: sqlite3.Connection) -> None:

@@ -617,6 +617,30 @@ def _get_detail(
     )
 
 
+CONTENT_HASH_KEY = "content_sha256"
+
+
+def _stored_payload_hash(
+    connection: sqlite3.Connection,
+    organization_id: str,
+    instruction_id: str,
+    version: int,
+) -> str | None:
+    """Digest of the version as it stands in this transaction, or None if the
+    row is not written yet — an event that precedes its content cannot describe
+    it, and a wrong digest is worse than none."""
+    row = connection.execute(
+        """
+        SELECT payload_json FROM instruction_versions
+        WHERE organization_id = ? AND instruction_id = ? AND version = ?
+        """,
+        (organization_id, instruction_id, version),
+    ).fetchone()
+    if row is None:
+        return None
+    return hashlib.sha256(str(row["payload_json"]).encode("utf-8")).hexdigest()
+
+
 def _append_audit_event(
     connection: sqlite3.Connection,
     organization_id: str,
@@ -636,6 +660,20 @@ def _append_audit_event(
     ).fetchone()
     sequence = int(previous["sequence"]) + 1 if previous else 1
     previous_hash = str(previous["event_hash"]) if previous else ""
+    # Fix the content the event is about, not only the fact that the event
+    # happened. Without this the trail proves who approved and when, and proves
+    # nothing about which text they approved: the versions table has no
+    # immutability triggers, so a direct edit of payload_json passed unnoticed.
+    #
+    # The payload legitimately changes over a version's life — a workflow
+    # decision and a claim validation both rewrite it — so each event carries the
+    # hash as of itself, and verification compares only the last one against the
+    # stored payload.
+    content_hash = _stored_payload_hash(connection, organization_id, instruction_id, version)
+    if content_hash is not None:
+        event = event.model_copy(
+            update={"metadata": {**event.metadata, CONTENT_HASH_KEY: content_hash}}
+        )
     event_json = _model_json(event)
     event_hash = audit_event_hash(
         organization_id,
