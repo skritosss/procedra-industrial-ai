@@ -7,7 +7,7 @@ The project is intentionally built as more than a text generator: it demonstrate
 > Current release status: controlled local demo / partner walkthrough prototype.
 > Not approved for internet-facing production deployment or regulated enterprise data storage.
 
-![Procedra desktop interface](docs/assets/screenshots/procedra-desktop.png)
+![Procedra generator](docs/assets/screenshots/01-generator.jpg)
 
 ## Fast demo path
 
@@ -104,17 +104,26 @@ Procedra explores a practical AI workflow for this problem:
 
 ## Screenshots
 
-| Instruction result | Quality evaluation |
-|---|---|
-| ![Generated instruction result](docs/assets/screenshots/procedra-instruction-result.png) | ![Quality evaluation](docs/assets/screenshots/procedra-quality-evaluation.png) |
+Captured from the running application after the September 2026 interface
+rebuild. The interface language is Russian because the product is built for
+Russian industrial safety documentation; the API, the code and this document are
+English.
 
-| Source grounding | Execution checklist |
+| Claim provenance | Quality evaluation |
 |---|---|
-| ![Source grounding](docs/assets/screenshots/procedra-sources.png) | ![Execution checklist](docs/assets/screenshots/procedra-execution-checklist.png) |
+| ![Claim provenance](docs/assets/screenshots/02-proiskhozhdenie.jpg) | ![Quality evaluation](docs/assets/screenshots/03-otsenka.jpg) |
 
-| Video-derived context | Mobile navigation |
+| Retrieved sources | Operator checklist |
 |---|---|
-| ![Video keyframes](docs/assets/screenshots/procedra-video-keyframes.png) | ![Mobile navigation](docs/assets/screenshots/procedra-mobile-navigation.png) |
+| ![Retrieved sources](docs/assets/screenshots/04-istochniki.jpg) | ![Operator checklist](docs/assets/screenshots/05-cheklist.jpg) |
+
+| Editor | History and review |
+|---|---|
+| ![Editor](docs/assets/screenshots/06-redaktor.jpg) | ![History and review](docs/assets/screenshots/07-istoriya.jpg) |
+
+Machine-readable export, the same instruction as JSON:
+
+![JSON export](docs/assets/screenshots/08-json.jpg)
 
 ## Architecture at a glance
 
