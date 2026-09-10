@@ -218,12 +218,13 @@ def build_partner_demo_pack(output_dir: Path) -> dict[str, Any]:
             shutil.copy2(source, frame_output / source.name)
         brand_output = output_dir / "brand"
         brand_output.mkdir(exist_ok=True)
+        # The pack goes to a customer, so it carries the brand the product
+        # actually wears. The teal set below it is the pre-September-2026
+        # palette and shipping it would hand a prospect two different products.
         for filename in (
-            "procedra-wordmark.svg",
-            "procedra-wordmark.png",
+            "procedra-wordmark-brand.svg",
+            "procedra-wordmark-brand-reversed.svg",
             "procedra-wordmark-monochrome.svg",
-            "procedra-wordmark-reversed.svg",
-            "procedra-favicon.svg",
         ):
             shutil.copy2(BRAND_ASSET_DIR / filename, brand_output / filename)
 

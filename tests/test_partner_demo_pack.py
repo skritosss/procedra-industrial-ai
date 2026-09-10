@@ -41,7 +41,11 @@ def test_partner_demo_pack_builds_complete_isolated_evidence(tmp_path: Path) -> 
     assert "not customer validation" in summary
     assert (output_dir / "08-fallback-demo-video.mp4").stat().st_size > 1_000
     assert list((output_dir / "keyframes").glob("frame_*.jpg"))
-    assert (output_dir / "brand" / "procedra-wordmark.svg").is_file()
-    assert (output_dir / "brand" / "procedra-wordmark.png").is_file()
+    assert (output_dir / "brand" / "procedra-wordmark-brand.svg").is_file()
+    assert (output_dir / "brand" / "procedra-wordmark-brand-reversed.svg").is_file()
     assert any(item["path"] == "pilot-summary.md" for item in manifest["artifacts"])
-    assert any(item["path"] == "brand/procedra-wordmark.svg" for item in manifest["artifacts"])
+    assert any(item["path"] == "brand/procedra-wordmark-brand.svg" for item in manifest["artifacts"])
+    # The pre-September-2026 teal set must not travel to a customer alongside
+    # the current one: two palettes read as two products.
+    assert not list((output_dir / "brand").glob("procedra-favicon*"))
+    assert not (output_dir / "brand" / "procedra-wordmark.svg").exists()
