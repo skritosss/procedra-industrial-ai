@@ -23,7 +23,6 @@ REGULATORY_BASIS = (
 CONTENT_WIDTH = 178 * mm
 STEP_NUMBER_WIDTH = 12 * mm
 SCORE_COLUMN_WIDTH = 34 * mm
-BRAND_WORDMARK_PNG = Path(__file__).resolve().parents[1] / "static" / "assets" / "brand" / "procedra-wordmark-monochrome.png"
 
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
